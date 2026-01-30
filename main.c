@@ -1,13 +1,23 @@
-#include <stdio.h>
 #include <raylib.h>
+#include <raymath.h>
 
-const int FPS = 30;
-const int W =  800;
-const int H =  600;
+#define S(a, c) 4*PI*PI*(a)*(c)
 
-const int MOUSE_SPEED = 2;
 
 int main() {
+    const int FPS = 30;
+    const int W =  800;
+    const int H =  600;
+
+    const int MOUSE_SPEED = 4;
+
+    const double A = 0.6f;
+    const double C = 22.f;
+    const double R = pow(C, 0.5);
+
+    const double OFFSET = 0.5;
+
+
     InitWindow(W, H, "Toroidal Go");
     SetTargetFPS(FPS);
 
@@ -21,66 +31,57 @@ int main() {
 
     Ray ray = {0};
 
-    Mesh torus = GenMeshTorus(0.6f, 12, 16, 32);
-    Model model = LoadModelFromMesh(torus);
+    Model torus = LoadModelFromMesh(GenMeshTorus(A, C, 16, 32));
+    Model black = LoadModelFromMesh(GenMeshSphere(1, 32, 32));
+    Model white = LoadModelFromMesh(GenMeshSphere(1, 32, 32));
 
     Texture2D texture = LoadTexture("imgs/board.png");
-    model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+    torus.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
-    BoundingBox box = GetMeshBoundingBox(model.meshes[0]);
+    Vector3 stones[361];
 
-    // DisableCursor();
-
+    int count = 0;
     while (!WindowShouldClose()) {
-        UpdateCamera(&camera, CAMERA_THIRD_PERSON);
-
-        // if (IsKeyDown(KEY_UP)) camera.position.z += 1;
-        // if (IsKeyDown(KEY_DOWN)) camera.position.z -= 1;
-        // if (IsKeyDown(KEY_RIGHT)) camera.position.x -= 1;
-        // if (IsKeyDown(KEY_LEFT)) camera.position.x += 1;
+        if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) camera.position.y += 1;
+        if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) camera.position.y -= 1;
+        if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) camera.position.x += 1;
+        if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) camera.position.x -= 1;
         camera.position.z -= MOUSE_SPEED * GetMouseWheelMove();
 
-        RayCollision collision = {0};
-        collision.distance = 100;
-        collision.hit = false;
-
         ray = GetScreenToWorldRay(GetMousePosition(), camera);
-        RayCollision boxHitInfo = GetRayCollisionBox(ray, box);
+        RayCollision collision = GetRayCollisionMesh(ray, torus.meshes[0], torus.transform);
 
-        if ((boxHitInfo.hit) && (boxHitInfo.distance < collision.distance)) {
-            collision = boxHitInfo;
+        Vector3 pos = {-R + OFFSET, 0, 0};
+        RayCollision point_collision = GetRayCollisionSphere(ray, pos, 0.3);
 
-            RayCollision meshHitInfo = { 0 };
-            for (int m = 0; m < model.meshCount; m++) {
-                meshHitInfo = GetRayCollisionMesh(ray, model.meshes[m], model.transform);
+        if (collision.hit && point_collision.hit && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            double len_norm = Vector3Length(collision.normal);
+            Vector3 offset_v = Vector3Scale(collision.normal, OFFSET / len_norm);
 
-                if (meshHitInfo.hit) {
-                    if ((!collision.hit) || (collision.distance > meshHitInfo.distance)) collision = meshHitInfo;
-                    break;
-                }
-            }
-
-            if (meshHitInfo.hit) {
-                collision = meshHitInfo;
-                printf("hello\n");
-            }
+            stones[count] = Vector3Subtract(collision.point, offset_v);
+            count++;
         }
 
         BeginDrawing();
-            ClearBackground(RAYWHITE);
+            // ClearBackground(RAYWHITE);
+            ClearBackground(GRAY);
 
             BeginMode3D(camera);
 
-                if (boxHitInfo.hit) DrawBoundingBox(box, LIME);
+                for (int i=0; i<count; i++) {
+                    if (i % 2 == 0)
+                        DrawModel(black, stones[i], 1, BLACK);
+                    else
+                        DrawModel(white, stones[i], 1, WHITE);
+                }
 
-                DrawModel(model, (Vector3){ 0.5f, 0.0f, 0.0f }, 1, BEIGE);
-                DrawGrid(40, 1.0f);
+                DrawModel(torus, (Vector3){ 0.0f, 0.0f, 0.0f }, 1, BEIGE);
 
             EndMode3D();
         EndDrawing();
     }
      
-    UnloadModel(model);
+    UnloadModel(torus);
     CloseWindow();
 
     return 0;
