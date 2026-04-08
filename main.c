@@ -1,6 +1,7 @@
 #include <raylib.h>
 #include <raymath.h>
 
+// torus surface
 #define S(a, c) 4*PI*PI*(a)*(c)
 
 
