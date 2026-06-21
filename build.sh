@@ -1,11 +1,8 @@
 #!/bin/bash
 
 set -xe
-
-gcc main.c -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
-
-./a.out
-
-rm a.out
+gcc src/main.c -o main -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+./main
+rm main
 
 exit
