@@ -13,8 +13,6 @@
 
 #define CENTER_RADIUS (SIZE / 2.0f)
 #define TUBE_RADIUS (NORM_RADIUS * SIZE / 2.0f)
-#define INNER_RADIUS (CENTER_RADIUS - TUBE_RADIUS)
-#define OUTER_RADIUS (CENTER_RADIUS + TUBE_RADIUS)
 
 #define DIST(v, w) Vector3Length(Vector3Subtract(v, w))
 
@@ -46,8 +44,6 @@ int main() {
   camera.fovy = 45.0f;
   camera.projection = CAMERA_PERSPECTIVE;
 
-  Ray ray = {0};
-
   Model torus = LoadModelFromMesh(GenMeshTorus(NORM_RADIUS, SIZE, 32, 64));
   Model black = LoadModelFromMesh(GenMeshSphere(1, 32, 64));
   Model white = LoadModelFromMesh(GenMeshSphere(1, 32, 64));
@@ -55,12 +51,21 @@ int main() {
   Texture2D texture = LoadTexture("./assets/board.png");
   torus.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
+  texture = LoadTexture("./assets/black_stone.png");
+  black.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+
+  texture = LoadTexture("./assets/white_marble.png");
+  white.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+
   Vector3 stones[N_INTERS];
   for (int i = 0; i < N_INTERS; i++)
     stones[i] = ORIGIN;
 
   Vector3 intersections[N_INTERS];
   compute_inters(intersections);
+
+  Vector3 sorted_inters[N_INTERS];
+  compute_inters(sorted_inters);
 
   SetTargetFPS(FPS);
   DisableCursor();
@@ -90,13 +95,13 @@ int main() {
         },
         GetMouseWheelMove() * 2.0f);
 
-    // ray = GetScreenToWorldRay(GetMousePosition(), camera);
-    //
-    // RayCollision collision =
-    //     GetRayCollisionMesh(ray, torus.meshes[0], torus.transform);
+    sort_inters(sorted_inters, camera.position);
 
-    if (IsKeyPressed(KEY_ENTER)) {
-      stones[count] = intersections[0];
+    if (IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_ENTER)) {
+      stones[count] = sorted_inters[1];
+      count++;
+    } else if (IsKeyPressed(KEY_ENTER)) {
+      stones[count] = sorted_inters[0];
       count++;
     }
 
@@ -107,15 +112,14 @@ int main() {
 
     DrawModel(torus, ORIGIN, 1, BEIGE);
 
-    sort_inters(intersections, camera.position);
-    draw_inters(intersections);
+    draw_inters(sorted_inters);
 
     for (int i = 0; i < N_INTERS; i++) {
       if (Vector3Length(stones[i]) == 0)
         continue;
 
       if (i % 2 == 0)
-        DrawModel(black, stones[i], 1, BLACK);
+        DrawModel(black, stones[i], 1, GRAY);
       else
         DrawModel(white, stones[i], 1, WHITE);
     }
@@ -125,6 +129,7 @@ int main() {
   }
 
   UnloadModel(torus);
+  UnloadTexture(texture);
   CloseWindow();
 
   return 0;
