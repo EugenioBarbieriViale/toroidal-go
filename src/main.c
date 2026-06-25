@@ -1,9 +1,8 @@
-// https://www.raylib.com/examples/core/loader.html?name=core_3d_camera_first_person
+// TODO
+// - nearest intersection must also be in view field
 
-#include <math.h>
 #include <raylib.h>
 #include <raymath.h>
-#include <stdio.h>
 
 #define FPS 30
 #define W 800
@@ -12,29 +11,24 @@
 #define NORM_RADIUS 0.6f
 #define SIZE 22.f
 
-// #define TUBE_RADIUS (SIZE * (1.0f - NORM_RADIUS))
-// #define INNER_RADIUS (SIZE * (2 * NORM_RADIUS - 1.0f))
-// #define INNER_RADIUS (SIZE * (1.0f - NORM_RADIUS))
-// #define OUTER_RADIUS TUBE_RADIUS + (TUBE_RADIUS - INNER_RADIUS) * 2
-// #define OUTER_RADIUS (SIZE * (1.0f + 2 * NORM_RADIUS))
+#define CENTER_RADIUS (SIZE / 2.0f)
+#define TUBE_RADIUS (NORM_RADIUS * SIZE / 2.0f)
+#define INNER_RADIUS (CENTER_RADIUS - TUBE_RADIUS)
+#define OUTER_RADIUS (CENTER_RADIUS + TUBE_RADIUS)
 
-#define INNER_RADIUS (SIZE * (2 * NORM_RADIUS - 1.0f))
-#define OUTER_RADIUS (2 * (CENTER_RADIUS - INNER_RADIUS) + INNER_RADIUS)
-#define CENTER_RADIUS (SIZE * NORM_RADIUS)
-#define TUBE_RADIUS (CENTER_RADIUS - INNER_RADIUS)
+#define DIST(v, w) Vector3Length(Vector3Subtract(v, w))
 
 #define N_LINES 18
-#define UNIT_ANGLE (2.0f * PI / (float)N_LINES)
+#define N_INTERS (N_LINES * N_LINES)
+#define UNIT_ANGLE (2.f * PI / (float)N_LINES)
 
 #define STONE_OFFSET 0.5f
-#define COLLISION_OFFSET 5.f
-
-#define MOUSE_SPEED 4
 
 const Vector3 ORIGIN = {0.f, 0.f, 0.f};
 
-void make_move(RayCollision, Vector3[], int *);
 void compute_inters(Vector3[]);
+void sort_inters(Vector3[], Vector3);
+void draw_inters(Vector3[]);
 
 Vector3 radial_offset(Vector3 v, float offset) {
   float len = Vector3Length(v);
@@ -42,36 +36,8 @@ Vector3 radial_offset(Vector3 v, float offset) {
   return Vector3Subtract(v, offset_v);
 }
 
-typedef struct {
-  float r;     // radial distance
-  float theta; // polar angle with respect to y
-  float phi;   // azimuthal angle with respect to z
-} PolarCoords;
-
-// https://en.wikipedia.org/wiki/Spherical_coordinate_system#/media/File:3D_Spherical.svg
-PolarCoords to_polar(Vector3 v) {
-  PolarCoords p;
-
-  p.r = Vector3Length(Vector3Subtract(ORIGIN, v));
-  p.theta = atanf(sqrtf(v.x * v.x + v.z * v.z) / (v.y));
-  p.phi = atanf(v.x / v.z);
-
-  return p;
-}
-
-Vector3 to_cartesian(PolarCoords p, Vector3 origin) {
-  Vector3 v;
-  v.y = p.r * cosf(p.theta);
-  v.x = p.r * sinf(p.theta) * sinf(p.phi);
-  v.z = p.r * sinf(p.theta) * cosf(p.phi);
-
-  return Vector3Add(v, origin);
-}
-
 int main() {
   InitWindow(W, H, "Toroidal Go");
-  printf("TUBE: %f, INNER: %f, OUTER: %f\n", TUBE_RADIUS, INNER_RADIUS,
-         OUTER_RADIUS);
 
   Camera camera = {0};
   camera.position = (Vector3){10.f, 10.f, 10.f};
@@ -89,15 +55,17 @@ int main() {
   Texture2D texture = LoadTexture("./assets/board.png");
   torus.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
-  Vector3 stones[361];
-  Vector3 intersections[361];
+  Vector3 stones[N_INTERS];
+  for (int i = 0; i < N_INTERS; i++)
+    stones[i] = ORIGIN;
+
+  Vector3 intersections[N_INTERS];
   compute_inters(intersections);
 
   SetTargetFPS(FPS);
   DisableCursor();
 
   int count = 0;
-  float phi = PI / 2.f;
   while (!WindowShouldClose()) {
     UpdateCameraPro(
         &camera,
@@ -122,32 +90,34 @@ int main() {
         },
         GetMouseWheelMove() * 2.0f);
 
-    ray = GetScreenToWorldRay(GetMousePosition(), camera);
+    // ray = GetScreenToWorldRay(GetMousePosition(), camera);
+    //
+    // RayCollision collision =
+    //     GetRayCollisionMesh(ray, torus.meshes[0], torus.transform);
 
-    RayCollision collision =
-        GetRayCollisionMesh(ray, torus.meshes[0], torus.transform);
-
-    make_move(collision, stones, &count);
+    if (IsKeyPressed(KEY_ENTER)) {
+      stones[count] = intersections[0];
+      count++;
+    }
 
     BeginDrawing();
     ClearBackground(GRAY);
 
     BeginMode3D(camera);
 
-    for (int i = 0; i < count; i++) {
+    DrawModel(torus, ORIGIN, 1, BEIGE);
+
+    sort_inters(intersections, camera.position);
+    draw_inters(intersections);
+
+    for (int i = 0; i < N_INTERS; i++) {
+      if (Vector3Length(stones[i]) == 0)
+        continue;
+
       if (i % 2 == 0)
         DrawModel(black, stones[i], 1, BLACK);
       else
         DrawModel(white, stones[i], 1, WHITE);
-    }
-
-    DrawModel(torus, ORIGIN, 1, BEIGE);
-
-    for (int i = 0; i < 361; i++) {
-      Vector3 v = intersections[i];
-      DrawLine3D(ORIGIN, v, GREEN);
-      DrawCubeV(v, (Vector3){0.2f, 0.2f, 0.2f}, RED);
-      DrawCubeWiresV(v, (Vector3){0.2f, 0.2f, 0.2f}, BLACK);
     }
 
     EndMode3D();
@@ -160,37 +130,56 @@ int main() {
   return 0;
 }
 
-void make_move(RayCollision collision, Vector3 stones[], int *count) {
-  if (collision.hit && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    Vector3 s = radial_offset(collision.normal, STONE_OFFSET);
+void compute_inters(Vector3 intersections[]) {
+  for (int i = 0; i < N_LINES; i++) {
+    float theta = i * UNIT_ANGLE;
 
-    stones[*count] = s;
-    (*count)++;
-
-    printf("[%f, %f, %f]\n", collision.point.x, collision.point.y,
-           collision.point.z);
+    for (int j = i * N_LINES; j < (i + 1) * N_LINES; j++) {
+      float phi = j * UNIT_ANGLE;
+      intersections[j] =
+          (Vector3){(CENTER_RADIUS + TUBE_RADIUS * cosf(phi)) * cosf(theta),
+                    (CENTER_RADIUS + TUBE_RADIUS * cosf(phi)) * sinf(theta),
+                    TUBE_RADIUS * sinf(phi)};
+    }
   }
 }
 
-void compute_inters(Vector3 intersections[]) {
-  for (int i = 0; i < 361; i++) {
-    intersections[i] = ORIGIN;
+void sort_inters(Vector3 intersections[], Vector3 cam_pos) {
+  float distances[N_INTERS];
+  for (int i = 0; i < N_INTERS; i++) {
+    distances[i] = DIST(cam_pos, intersections[i]);
   }
 
-  PolarCoords p;
-  p.r = INNER_RADIUS;
-  p.phi = PI / 2.f;
+  for (int i = 1; i < N_INTERS; i++) {
+    Vector3 key_vec = intersections[i];
+    float key_dst = distances[i];
+    int j = i - 1;
 
-  for (int l = 0; l < N_LINES; l++) {
-    p.theta = l * UNIT_ANGLE - UNIT_ANGLE / 2.f;
-    intersections[l] = to_cartesian(p, ORIGIN);
+    while (j >= 0 && distances[j] > key_dst) {
+      intersections[j + 1] = intersections[j];
+      distances[j + 1] = distances[j];
+      j--;
+    }
+
+    intersections[j + 1] = key_vec;
+    distances[j + 1] = key_dst;
   }
+}
 
-  p.r = TUBE_RADIUS;
-  p.phi = 0.f;
+void draw_inters(Vector3 intersections[]) {
+  for (int i = 0; i < N_INTERS; i++) {
+    Vector3 v = intersections[i];
 
-  for (int l = N_LINES; l < 2 * N_LINES; l++) {
-    p.theta = l * UNIT_ANGLE - UNIT_ANGLE / 2.f;
-    intersections[l] = to_cartesian(p, (Vector3){CENTER_RADIUS, 0.f, 0.f});
+    if (Vector3Length(v) == 0)
+      continue;
+
+    Color color = RED;
+    if (i == 0)
+      color = GREEN;
+    else if (i == 1)
+      color = YELLOW;
+
+    DrawCubeV(v, (Vector3){0.2f, 0.2f, 0.2f}, color);
+    DrawCubeWiresV(v, (Vector3){0.2f, 0.2f, 0.2f}, BLACK);
   }
 }
