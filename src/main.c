@@ -3,10 +3,12 @@
 
 #include <raylib.h>
 #include <raymath.h>
+#include <stdio.h>
+#include <string.h> // remove
 
-#define FPS 30
 #define W 800
 #define H 600
+#define FPS 30
 
 #define NORM_RADIUS 0.6f
 #define SIZE 22.f
@@ -14,7 +16,11 @@
 #define CENTER_RADIUS (SIZE / 2.0f)
 #define TUBE_RADIUS (NORM_RADIUS * SIZE / 2.0f)
 
+#define EPS (10e-3)
+
 #define DIST(v, w) Vector3Length(Vector3Subtract(v, w))
+#define IS_ZERO(v) (Vector3Length(v) < EPS)
+#define IS_EQUALF(a, b) (fabs(a - b) < EPS)
 
 #define N_LINES 18
 #define N_INTERS (N_LINES * N_LINES)
@@ -28,10 +34,37 @@ void compute_inters(Vector3[]);
 void sort_inters(Vector3[], Vector3);
 void draw_inters(Vector3[]);
 
-Vector3 radial_offset(Vector3 v, float offset) {
-  float len = Vector3Length(v);
-  Vector3 offset_v = Vector3Scale(v, offset / len);
-  return Vector3Subtract(v, offset_v);
+typedef struct {
+  int row;
+  int col;
+} Coord2;
+
+void get_board_coords(Coord2[]);
+
+typedef struct {
+  Vector3 key;
+  Coord2 value;
+} HashItem;
+
+void install_map(HashItem[], Vector3[], Coord2[]);
+Coord2 *lookup(HashItem[], Vector3);
+
+void print_board(Coord2 coords[]) {
+  char grid[N_LINES][N_LINES + 1];
+  for (int i = 0; i < N_LINES; i++) {
+    memset(grid[i], ' ', N_LINES);
+    grid[i][N_LINES] = '\0';
+  }
+
+  for (int i = 0; i < N_INTERS; i++) {
+    int r = coords[i].row;
+    int c = coords[i].col;
+    if (c >= 0 && c < N_LINES && r >= 0 && r < N_LINES)
+      grid[r][c] = '.';
+  }
+
+  for (int i = N_LINES - 1; i >= 0; i--)
+    printf("%s\n", grid[i]);
 }
 
 int main() {
@@ -64,8 +97,20 @@ int main() {
   Vector3 intersections[N_INTERS];
   compute_inters(intersections);
 
+  // hmmmmm
   Vector3 sorted_inters[N_INTERS];
   compute_inters(sorted_inters);
+
+  Coord2 coords[N_INTERS];
+  get_board_coords(coords);
+
+  HashItem hashmap[N_INTERS];
+  install_map(hashmap, intersections, coords);
+
+  for (int i = 0; i < N_INTERS; i++) {
+    if (lookup(hashmap, intersections[i]) == NULL)
+      printf("NO CORRESPONDING KEY OF ELEMENT %d\n", i);
+  }
 
   SetTargetFPS(FPS);
   DisableCursor();
@@ -115,7 +160,7 @@ int main() {
     draw_inters(sorted_inters);
 
     for (int i = 0; i < N_INTERS; i++) {
-      if (Vector3Length(stones[i]) == 0)
+      if (Vector3Length(stones[i]) < 10e-3)
         continue;
 
       if (i % 2 == 0)
@@ -126,9 +171,15 @@ int main() {
 
     EndMode3D();
     EndDrawing();
+
+    // temporary for visualization in 2d
+    print_board(coords);
   }
 
   UnloadModel(torus);
+  UnloadModel(black);
+  UnloadModel(white);
+
   UnloadTexture(texture);
   CloseWindow();
 
@@ -137,10 +188,10 @@ int main() {
 
 void compute_inters(Vector3 intersections[]) {
   for (int i = 0; i < N_LINES; i++) {
-    float theta = i * UNIT_ANGLE;
+    float theta = (float)i * UNIT_ANGLE;
 
     for (int j = i * N_LINES; j < (i + 1) * N_LINES; j++) {
-      float phi = j * UNIT_ANGLE;
+      float phi = (float)j * UNIT_ANGLE;
       intersections[j] =
           (Vector3){(CENTER_RADIUS + TUBE_RADIUS * cosf(phi)) * cosf(theta),
                     (CENTER_RADIUS + TUBE_RADIUS * cosf(phi)) * sinf(theta),
@@ -171,11 +222,11 @@ void sort_inters(Vector3 intersections[], Vector3 cam_pos) {
   }
 }
 
-void draw_inters(Vector3 intersections[]) {
+void draw_inters(Vector3 sorted_inters[]) {
   for (int i = 0; i < N_INTERS; i++) {
-    Vector3 v = intersections[i];
+    Vector3 v = sorted_inters[i];
 
-    if (Vector3Length(v) == 0)
+    if (IS_ZERO(v))
       continue;
 
     Color color = RED;
@@ -187,4 +238,33 @@ void draw_inters(Vector3 intersections[]) {
     DrawCubeV(v, (Vector3){0.2f, 0.2f, 0.2f}, color);
     DrawCubeWiresV(v, (Vector3){0.2f, 0.2f, 0.2f}, BLACK);
   }
+}
+
+void get_board_coords(Coord2 coords[]) {
+  for (int i = 0; i < N_INTERS; i++) {
+    coords[i].row = (int)(i / N_LINES);
+    coords[i].col = i % N_LINES;
+  }
+}
+
+void install_map(HashItem hashmap[], Vector3 intersections[], Coord2 coords[]) {
+  HashItem h;
+  for (int i = 0; i < N_INTERS; i++) {
+    h.key = intersections[i];
+    h.value = coords[i];
+    hashmap[i] = h;
+  }
+}
+
+int Vector3cmp(Vector3 v, Vector3 w) {
+  return (IS_EQUALF(v.x, w.x) && IS_EQUALF(v.y, w.y) && IS_EQUALF(v.z, w.z));
+}
+
+Coord2 *lookup(HashItem hashmap[], Vector3 key) {
+  for (int i = 0; i < N_INTERS; i++) {
+    if (Vector3cmp(hashmap[i].key, key) == 0) {
+      return &hashmap[i].value;
+    }
+  }
+  return NULL;
 }
