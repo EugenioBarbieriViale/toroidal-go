@@ -19,14 +19,12 @@
 #define EPS (10e-3)
 
 #define DIST(v, w) Vector3Length(Vector3Subtract(v, w))
-#define IS_ZERO(v) (Vector3Length(v) < EPS)
+#define IS_ZERO(v) (Vector3Length(v) < (float)EPS)
 #define IS_EQUALF(a, b) (fabs(a - b) < EPS)
 
 #define N_LINES 18
 #define N_INTERS (N_LINES * N_LINES)
 #define UNIT_ANGLE (2.f * PI / (float)N_LINES)
-
-#define STONE_OFFSET 0.5f
 
 const Vector3 ORIGIN = {0.f, 0.f, 0.f};
 
@@ -160,7 +158,7 @@ int main() {
     draw_inters(sorted_inters);
 
     for (int i = 0; i < N_INTERS; i++) {
-      if (Vector3Length(stones[i]) < 10e-3)
+      if (IS_ZERO(stones[i]))
         continue;
 
       if (i % 2 == 0)
