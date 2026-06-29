@@ -5,12 +5,13 @@ gcc src/main.c -o main \
   -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
   -g -O2 \
   -Wall -Wextra \
-  -Wunused \
   -Wconversion \
   -Wfloat-equal \
   -Wunreachable-code \
-  -Wuninitialized \
   -Wno-free-nonheap-object \
+  -Wdouble-promotion \
+  -Wformat \
+  -Wpedantic \
   -fsanitize={address,undefined}
 
 ./main
