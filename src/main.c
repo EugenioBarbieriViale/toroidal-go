@@ -4,7 +4,6 @@
 #include <raylib.h>
 #include <raymath.h>
 #include <stdio.h>
-#include <string.h> // remove
 
 #define W 800
 #define H 600
@@ -46,24 +45,6 @@ typedef struct {
 
 void install_map(HashItem[], Vector3[], Coord2[]);
 Coord2 *lookup(HashItem[], Vector3);
-
-void print_board(Coord2 coords[]) {
-  char grid[N_LINES][N_LINES + 1];
-  for (int i = 0; i < N_LINES; i++) {
-    memset(grid[i], ' ', N_LINES);
-    grid[i][N_LINES] = '\0';
-  }
-
-  for (int i = 0; i < N_INTERS; i++) {
-    int r = coords[i].row;
-    int c = coords[i].col;
-    if (c >= 0 && c < N_LINES && r >= 0 && r < N_LINES)
-      grid[r][c] = '.';
-  }
-
-  for (int i = N_LINES - 1; i >= 0; i--)
-    printf("%s\n", grid[i]);
-}
 
 int main() {
   InitWindow(W, H, "Toroidal Go");
@@ -161,17 +142,17 @@ int main() {
       if (IS_ZERO(stones[i]))
         continue;
 
-      if (i % 2 == 0)
+      Coord2 c = *lookup(hashmap, stones[i]);
+
+      if (i % 2 == 0) {
         DrawModel(black, stones[i], 1, GRAY);
-      else
+      } else {
         DrawModel(white, stones[i], 1, WHITE);
+      }
     }
 
     EndMode3D();
     EndDrawing();
-
-    // temporary for visualization in 2d
-    print_board(coords);
   }
 
   UnloadModel(torus);
