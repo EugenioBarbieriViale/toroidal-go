@@ -10,6 +10,10 @@
 
 #define INIT_STACK_SIZE 8
 
+#define BLACK_OR_WHITE(c) c == 'O' ? "BLACK" : "WHITE"
+
+int ko_point = -1;
+
 typedef struct {
   int row;
   int col;
@@ -70,17 +74,15 @@ void construct(Stack *s) {
 
 void reallocate(Stack *s) {
   s->length += INIT_STACK_SIZE;
-  int *re_data = realloc(s->data, s->length * sizeof(int));
-  if (re_data)
-    s->data = re_data;
-  else {
+  s->data = realloc(s->data, s->length * sizeof(int));
+  if (!s->data) {
     perror("Error reallocating memory");
     abort();
   }
 }
 
 void push(int val, Stack *s) {
-  if (s->top == s->length - 1) {
+  if (s->top >= s->length - 1) {
     printf("Reallocating stack\n");
     reallocate(s);
   }
@@ -90,7 +92,7 @@ void push(int val, Stack *s) {
 }
 
 int pop(Stack *s) {
-  if (s->top == -1) {
+  if (s->top <= -1) {
     perror("Stack underflow, something is wrong\n");
     abort();
   }
@@ -122,11 +124,6 @@ void flood_fill(int fc, char board[], int all_neighbors[][4], Stack *reached,
 
     for (int i = 0; i < 4; i++) {
       int fn = all_neighbors[current_fc][i];
-      // if (fn != -1 && board[fn] == color && !contains(fn, chain))
-      //   push(fn, &frontier);
-      // else if (board[fn] != color)
-      //   push(fn, reached);
-
       if (fn != -1 && !contains(fn, chain)) {
         if (board[fn] == color)
           push(fn, &frontier);
@@ -139,28 +136,31 @@ void flood_fill(int fc, char board[], int all_neighbors[][4], Stack *reached,
   free(frontier.data);
 }
 
-// memcpy captured stones
-int unsigned maybe_capture(int fc, char board[], int all_neighbors[][4],
+int unsigned get_liberties(int fc, char board[], int all_neighbors[][4],
                            Stack *reached, Stack *chain) {
   reached->top = -1;
   chain->top = -1;
   flood_fill(fc, board, all_neighbors, reached, chain);
 
-  int liberties = 0;
+  int unsigned liberties = 0;
   for (int i = 0; i <= reached->top; i++) {
     int fc = reached->data[i];
     if (board[fc] == EMPTY)
       liberties++;
   }
 
-  if (liberties == 0) {
+  return liberties;
+}
+
+int maybe_capture(unsigned int libs, char board[], Stack *chain) {
+  if (libs == 0) {
     for (int i = 0; i <= chain->top; i++) {
       int fc = chain->data[i];
       board[fc] = EMPTY;
     }
+    return 1;
   }
-
-  return liberties;
+  return 0;
 }
 
 void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
@@ -168,41 +168,70 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
   int fc = flatten(c);
 
   if (board[fc] != EMPTY) {
-    printf("Illegal move\n");
+    printf("ILLEGAL MOVE: (%d, %d) already occupied\n", c.row, c.col);
     return;
   }
+
+  if (fc != -1 && fc == ko_point) {
+    printf("ILLEGAL MOVE: Ko violation at (%d, %d)\n", c.row, c.col);
+    return;
+  }
+
+  ko_point = -1;
 
   board[fc] = color;
 
   Stack opp_stones;
   construct(&opp_stones);
 
-  Stack my_stones;
-  construct(&my_stones);
-
   for (int i = 0; i < 4; i++) {
     int fn = all_neighbors[fc][i];
-    if (board[fn] == color)
-      push(fn, &my_stones);
-    else if (board[fn] != EMPTY && board[fn] != color)
-      push(fn, &opp_stones);
+    if (fn != -1) {
+      if (board[fn] != EMPTY && board[fn] != color)
+        push(fn, &opp_stones);
+    }
   }
+
+  int unsigned captured_stone_count = 0;
+  int single_capture_point = -1;
 
   for (int i = 0; i <= opp_stones.top; i++) {
-    int fc = opp_stones.data[i];
-    int lib = maybe_capture(fc, board, all_neighbors, reached, chain);
-    printf("Opp libs: %d\n", lib);
+    int fn = opp_stones.data[i];
+    if (board[fn] == EMPTY)
+      continue;
+
+    int unsigned fn_libs =
+        get_liberties(fn, board, all_neighbors, reached, chain);
+
+    // remove opponent's stones
+    if (maybe_capture(fn_libs, board, chain)) {
+      captured_stone_count += chain->top + 1;
+
+      if (chain->top == 0)
+        single_capture_point = chain->data[0];
+    }
   }
 
-  for (int i = 0; i <= my_stones.top; i++) {
-    int fc = my_stones.data[i];
-    int lib = maybe_capture(fc, board, all_neighbors, reached, chain);
-    printf("My libs: %d\n", lib);
+  int unsigned fc_libs =
+      get_liberties(fc, board, all_neighbors, reached, chain);
+
+  if (fc_libs == 0) {
+    board[fc] = EMPTY;
+    printf("ILLEGAL MOVE: Suicide at (%d, %d)\n", c.row, c.col);
+    free(opp_stones.data);
+    return;
   }
+
+  int fc_group_size = chain->top + 1;
+  if (captured_stone_count == 1 && fc_libs == 1 && fc_group_size == 1)
+    ko_point = single_capture_point;
+  else
+    ko_point = -1;
 
   free(opp_stones.data);
-  free(my_stones.data);
 }
+
+void score(char board[]) {}
 
 void show_board(char board[]) {
   printf("*------------------------------------------------------*\n");
@@ -230,53 +259,72 @@ int main() {
   Stack reached;
   construct(&reached);
 
-  move((Coord2){1, 2}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
+  // move((Coord2){1, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  // show_board(board);
+  //
+  // move((Coord2){0, 3}, board, all_neighbors, &reached, &chain, WHITE);
+  // show_board(board);
+  //
+  // move((Coord2){0, 2}, board, all_neighbors, &reached, &chain, BLACK);
+  // show_board(board);
+  //
+  // move((Coord2){0, 4}, board, all_neighbors, &reached, &chain, WHITE);
+  // show_board(board);
+  //
+  // move((Coord2){0, 5}, board, all_neighbors, &reached, &chain, BLACK);
+  // show_board(board);
+  //
+  // // filler White move elsewhere, unrelated
+  // move((Coord2){5, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  // show_board(board);
+  //
+  // // This fills the last liberty at (1,4) -> should capture the 2-stone edge
+  // // group
+  // move((Coord2){1, 4}, board, all_neighbors, &reached, &chain, BLACK);
+  // show_board(board);
 
-  move((Coord2){2, 2}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-
-  move((Coord2){1, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-
-  move((Coord2){2, 3}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-
-  move((Coord2){2, 1}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-
-  move((Coord2){3, 2}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-
-  move((Coord2){3, 1}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-
-  move((Coord2){3, 3}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
+  // --- Ko test setup (same as before) ---
 
   move((Coord2){2, 4}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
 
-  // filler White move elsewhere on the board, unrelated to the group
-  move((Coord2){7, 7}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){3, 6}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
 
-  move((Coord2){3, 4}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){4, 4}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
 
-  // filler White move
-  move((Coord2){7, 8}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){2, 5}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
 
-  move((Coord2){4, 2}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){3, 3}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
 
-  // filler White move
-  move((Coord2){7, 6}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){4, 5}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
 
-  // This fills the LAST liberty of the White group -> should trigger capture
-  move((Coord2){4, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){7, 7}, board, all_neighbors, &reached, &chain,
+       BLACK); // filler, irrelevant
+  show_board(board);
+
+  move((Coord2){3, 4}, board, all_neighbors, &reached, &chain,
+       WHITE); // stone to be captured; liberty only at (3,5)
+  show_board(board);
+
+  // --- Ko violation test ---
+
+  // Black captures the lone White stone at (3,4).
+  // Ko point should now be set to (3,4).
+  move((Coord2){3, 5}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+
+  // ILLEGAL: White immediately tries to recapture at (3,4).
+  // This recreates the exact position from before Black's last move
+  // (White stone at (3,4), Black stone at (3,5) removed).
+  // move() should detect this violates ko and reject the move —
+  // board state after this call should be UNCHANGED from the previous
+  // show_board() output.
+  move((Coord2){3, 4}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
 
   free(chain.data);
