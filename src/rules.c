@@ -1,7 +1,8 @@
+#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define N_LINES 18
+#define N_LINES 19
 #define N_INTERS (N_LINES * N_LINES)
 
 #define BLACK 'O'
@@ -9,8 +10,6 @@
 #define EMPTY '.'
 
 #define INIT_STACK_SIZE 8
-
-#define BLACK_OR_WHITE(c) c == 'O' ? "BLACK" : "WHITE"
 
 int ko_point = -1;
 
@@ -59,23 +58,23 @@ void get_all_neighbors(int all_neighbors[][4]) {
 typedef struct {
   int top;
   unsigned int length;
-  int *data;
+  int *buffer;
 } Stack;
 
 void construct(Stack *s) {
   s->top = -1;
   s->length = INIT_STACK_SIZE;
-  s->data = (int *)malloc(INIT_STACK_SIZE * sizeof(int));
-  if (!s->data) {
+  s->buffer = (int *)malloc(INIT_STACK_SIZE * sizeof(int));
+  if (!s->buffer) {
     perror("Error allocating memory");
     abort();
   }
 }
 
-void reallocate(Stack *s) {
-  s->length += INIT_STACK_SIZE;
-  s->data = realloc(s->data, s->length * sizeof(int));
-  if (!s->data) {
+void reallocate(int size, Stack *s) {
+  s->length += size;
+  s->buffer = realloc(s->buffer, s->length * sizeof(int));
+  if (!s->buffer) {
     perror("Error reallocating memory");
     abort();
   }
@@ -83,12 +82,12 @@ void reallocate(Stack *s) {
 
 void push(int val, Stack *s) {
   if (s->top >= s->length - 1) {
-    printf("Reallocating stack\n");
-    reallocate(s);
+    reallocate(INIT_STACK_SIZE, s);
+    printf("Adding memory to stack, lenght now is %d\n", s->length);
   }
 
   s->top++;
-  s->data[s->top] = val;
+  s->buffer[s->top] = val;
 }
 
 int pop(Stack *s) {
@@ -96,18 +95,36 @@ int pop(Stack *s) {
     perror("Stack underflow, something is wrong\n");
     abort();
   }
-  int n = s->data[s->top--];
+
+  int len_diff = s->length - 2 * INIT_STACK_SIZE;
+  if (len_diff > 0 && s->top <= len_diff) {
+    reallocate(-1 * INIT_STACK_SIZE, s);
+    printf("Removing unused memory from stack, lenght now is %d\n", s->length);
+  }
+
+  int n = s->buffer[s->top--];
   return n;
 }
 
-int contains(int val, Stack *s) {
-  for (int i = 0; i <= s->top; i++) {
-    if (val == s->data[i]) {
-      return 1;
-    }
+int get_idx_int(int elem, int len, int arr[]) {
+  for (int i = 0; i < len; i++) {
+    if (elem == arr[i])
+      return i;
   }
-  return 0;
+  return -1;
 }
+
+int get_idx_char(char elem, int len, char arr[]) {
+  for (int i = 0; i < len; i++) {
+    if (elem == arr[i])
+      return i;
+  }
+  return -1;
+}
+
+// useless, make board full int
+#define get_idx(elem, len, arr)                                                \
+  _Generic((arr), int *: get_idx_int, char *: get_idx_char)(elem, len, arr)
 
 void flood_fill(int fc, char board[], int all_neighbors[][4], Stack *reached,
                 Stack *chain) {
@@ -124,7 +141,8 @@ void flood_fill(int fc, char board[], int all_neighbors[][4], Stack *reached,
 
     for (int i = 0; i < 4; i++) {
       int fn = all_neighbors[current_fc][i];
-      if (fn != -1 && !contains(fn, chain)) {
+      int not_contains_fn = get_idx(fn, chain->top + 1, chain->buffer) == -1;
+      if (fn != -1 && not_contains_fn) {
         if (board[fn] == color)
           push(fn, &frontier);
         else
@@ -133,7 +151,7 @@ void flood_fill(int fc, char board[], int all_neighbors[][4], Stack *reached,
     }
   }
 
-  free(frontier.data);
+  free(frontier.buffer);
 }
 
 int unsigned get_liberties(int fc, char board[], int all_neighbors[][4],
@@ -144,7 +162,7 @@ int unsigned get_liberties(int fc, char board[], int all_neighbors[][4],
 
   int unsigned liberties = 0;
   for (int i = 0; i <= reached->top; i++) {
-    int fc = reached->data[i];
+    int fc = reached->buffer[i];
     if (board[fc] == EMPTY)
       liberties++;
   }
@@ -155,7 +173,7 @@ int unsigned get_liberties(int fc, char board[], int all_neighbors[][4],
 int maybe_capture(unsigned int libs, char board[], Stack *chain) {
   if (libs == 0) {
     for (int i = 0; i <= chain->top; i++) {
-      int fc = chain->data[i];
+      int fc = chain->buffer[i];
       board[fc] = EMPTY;
     }
     return 1;
@@ -196,7 +214,7 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
   int single_capture_point = -1;
 
   for (int i = 0; i <= opp_stones.top; i++) {
-    int fn = opp_stones.data[i];
+    int fn = opp_stones.buffer[i];
     if (board[fn] == EMPTY)
       continue;
 
@@ -208,7 +226,7 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
       captured_stone_count += chain->top + 1;
 
       if (chain->top == 0)
-        single_capture_point = chain->data[0];
+        single_capture_point = chain->buffer[0];
     }
   }
 
@@ -218,7 +236,7 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
   if (fc_libs == 0) {
     board[fc] = EMPTY;
     printf("ILLEGAL MOVE: Suicide at (%d, %d)\n", c.row, c.col);
-    free(opp_stones.data);
+    free(opp_stones.buffer);
     return;
   }
 
@@ -228,13 +246,74 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
   else
     ko_point = -1;
 
-  free(opp_stones.data);
+  free(opp_stones.buffer);
 }
 
-void score(char board[]) {}
+void clone_arr(char from[], char to[], int len) {
+  for (int i = 0; i < len; i++)
+    to[i] = from[i];
+}
+
+void score(char board[], int all_neighbors[][4], int *black_score,
+           int *white_score) {
+  char score_board[N_INTERS];
+  clone_arr(board, score_board, N_INTERS);
+
+  Stack empties;
+  construct(&empties);
+
+  Stack borders;
+  construct(&borders);
+
+  int fempty = 0;
+
+  while (1) {
+    fempty = get_idx(EMPTY, N_INTERS, score_board);
+    if (fempty == -1)
+      break;
+
+    empties.top = -1;
+    borders.top = -1;
+    flood_fill(fempty, score_board, all_neighbors, &borders, &empties);
+
+    if (borders.top == -1)
+      break;
+
+    char maybe_border_color = score_board[borders.buffer[0]];
+    int all_same_color = 1;
+
+    for (int i = 0; i <= borders.top; i++) {
+      int fb = borders.buffer[i];
+      if (score_board[fb] != maybe_border_color) {
+        all_same_color = 0;
+        break;
+      }
+    }
+
+    if (all_same_color) {
+      for (int i = 0; i <= empties.top; i++) {
+        int fb = empties.buffer[i];
+        score_board[fb] = maybe_border_color;
+
+        if (maybe_border_color == BLACK)
+          (*black_score)++;
+        else if (maybe_border_color == WHITE)
+          (*white_score)++;
+      }
+    } else {
+      for (int i = 0; i <= empties.top; i++) {
+        int fb = empties.buffer[i];
+        score_board[fb] = '?';
+      }
+    }
+  }
+
+  free(empties.buffer);
+  free(borders.buffer);
+}
 
 void show_board(char board[]) {
-  printf("*------------------------------------------------------*\n");
+  printf("*---------------------------------------------------------*\n");
   for (int i = 0; i < N_LINES; i++) {
     printf("|");
     for (int j = 0; j < N_LINES; j++) {
@@ -243,7 +322,7 @@ void show_board(char board[]) {
     }
     printf("|\n");
   }
-  printf("*------------------------------------------------------*\n");
+  printf("*---------------------------------------------------------*\n");
 }
 
 int main() {
@@ -259,76 +338,91 @@ int main() {
   Stack reached;
   construct(&reached);
 
-  // move((Coord2){1, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  // show_board(board);
-  //
-  // move((Coord2){0, 3}, board, all_neighbors, &reached, &chain, WHITE);
-  // show_board(board);
-  //
-  // move((Coord2){0, 2}, board, all_neighbors, &reached, &chain, BLACK);
-  // show_board(board);
-  //
-  // move((Coord2){0, 4}, board, all_neighbors, &reached, &chain, WHITE);
-  // show_board(board);
-  //
-  // move((Coord2){0, 5}, board, all_neighbors, &reached, &chain, BLACK);
-  // show_board(board);
-  //
-  // // filler White move elsewhere, unrelated
-  // move((Coord2){5, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  // show_board(board);
-  //
-  // // This fills the last liberty at (1,4) -> should capture the 2-stone edge
-  // // group
-  // move((Coord2){1, 4}, board, all_neighbors, &reached, &chain, BLACK);
-  // show_board(board);
-
-  // --- Ko test setup (same as before) ---
-
-  move((Coord2){2, 4}, board, all_neighbors, &reached, &chain, BLACK);
+  // Claude generated test
+  move((Coord2){0, 3}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-
-  move((Coord2){3, 6}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){0, 5}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
-
-  move((Coord2){4, 4}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){1, 3}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-
+  move((Coord2){1, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){2, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
   move((Coord2){2, 5}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
-
   move((Coord2){3, 3}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-
+  move((Coord2){3, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){4, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
   move((Coord2){4, 5}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
-
-  move((Coord2){7, 7}, board, all_neighbors, &reached, &chain,
-       BLACK); // filler, irrelevant
+  move((Coord2){5, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){5, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){6, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){6, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){7, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){7, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){8, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){8, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){9, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){9, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){10, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){10, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){11, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){11, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){12, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){12, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){13, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){13, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){14, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){14, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){15, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){15, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){16, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){16, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){17, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){17, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  show_board(board);
+  move((Coord2){18, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  show_board(board);
+  move((Coord2){18, 5}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
 
-  move((Coord2){3, 4}, board, all_neighbors, &reached, &chain,
-       WHITE); // stone to be captured; liberty only at (3,5)
-  show_board(board);
+  int black_score, white_score = 0;
+  score(board, all_neighbors, &black_score, &white_score);
 
-  // --- Ko violation test ---
+  printf("BLACK SCORE: %d, WHITE SCORE: %d\n", black_score, white_score);
 
-  // Black captures the lone White stone at (3,4).
-  // Ko point should now be set to (3,4).
-  move((Coord2){3, 5}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-
-  // ILLEGAL: White immediately tries to recapture at (3,4).
-  // This recreates the exact position from before Black's last move
-  // (White stone at (3,4), Black stone at (3,5) removed).
-  // move() should detect this violates ko and reject the move —
-  // board state after this call should be UNCHANGED from the previous
-  // show_board() output.
-  move((Coord2){3, 4}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-
-  free(chain.data);
-  free(reached.data);
+  free(chain.buffer);
+  free(reached.buffer);
 
   return 0;
 }
