@@ -1,4 +1,3 @@
-#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -27,25 +26,18 @@ void init_board(char board[]) {
   }
 }
 
-int is_on_board(Coord2 c) {
-  return c.row >= 0 && c.row < N_LINES && c.col >= 0 && c.col < N_LINES;
-}
-
 void get_neighbors(int fc, int out[]) {
   Coord2 c = unflatten(fc);
 
   Coord2 ns[4];
   int n = 0;
-  ns[n++] = (Coord2){c.row - 1, c.col};
-  ns[n++] = (Coord2){c.row + 1, c.col};
-  ns[n++] = (Coord2){c.row, c.col - 1};
-  ns[n++] = (Coord2){c.row, c.col + 1};
+  ns[n++] = (Coord2){(c.row - 1 + N_LINES) % N_LINES, c.col};
+  ns[n++] = (Coord2){(c.row + 1) % N_LINES, c.col};
+  ns[n++] = (Coord2){c.row, (c.col - 1 + N_LINES) % N_LINES};
+  ns[n++] = (Coord2){c.row, (c.col + 1) % N_LINES};
 
   for (int i = 0; i < 4; i++) {
-    if (is_on_board(ns[i]))
-      out[i] = flatten(ns[i]);
-    else
-      out[i] = -1;
+    out[i] = flatten(ns[i]);
   }
 }
 
@@ -83,7 +75,7 @@ void reallocate(int size, Stack *s) {
 void push(int val, Stack *s) {
   if (s->top >= s->length - 1) {
     reallocate(INIT_STACK_SIZE, s);
-    printf("Adding memory to stack, lenght now is %d\n", s->length);
+    // printf("Adding memory to stack, lenght now is %d\n", s->length);
   }
 
   s->top++;
@@ -99,7 +91,8 @@ int pop(Stack *s) {
   int len_diff = s->length - 2 * INIT_STACK_SIZE;
   if (len_diff > 0 && s->top <= len_diff) {
     reallocate(-1 * INIT_STACK_SIZE, s);
-    printf("Removing unused memory from stack, lenght now is %d\n", s->length);
+    // printf("Removing unused memory from stack, lenght now is %d\n",
+    // s->length);
   }
 
   int n = s->buffer[s->top--];
@@ -141,13 +134,16 @@ void flood_fill(int fc, char board[], int all_neighbors[][4], Stack *reached,
 
     for (int i = 0; i < 4; i++) {
       int fn = all_neighbors[current_fc][i];
-      int not_contains_fn = get_idx(fn, chain->top + 1, chain->buffer) == -1;
-      if (fn != -1 && not_contains_fn) {
-        if (board[fn] == color)
-          push(fn, &frontier);
-        else
-          push(fn, reached);
-      }
+
+      int fn_in_chain = get_idx(fn, chain->top + 1, chain->buffer) != -1;
+      int fn_in_frontier = get_idx(fn, frontier.top + 1, frontier.buffer) != -1;
+      if (fn_in_chain || fn_in_frontier)
+        continue;
+
+      if (board[fn] == color)
+        push(fn, &frontier);
+      else
+        push(fn, reached);
     }
   }
 
@@ -181,8 +177,17 @@ int maybe_capture(unsigned int libs, char board[], Stack *chain) {
   return 0;
 }
 
+int is_on_board(Coord2 c) {
+  return c.row >= 0 && c.row < N_LINES && c.col >= 0 && c.col < N_LINES;
+}
+
 void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
           Stack *chain, char color) {
+  if (!is_on_board(c)) {
+    printf("ILLEGAL MOVE: out of bounds (%d, %d)\n", c.row, c.col);
+    return;
+  }
+
   int fc = flatten(c);
 
   if (board[fc] != EMPTY) {
@@ -190,8 +195,8 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
     return;
   }
 
-  if (fc != -1 && fc == ko_point) {
-    printf("ILLEGAL MOVE: Ko violation at (%d, %d)\n", c.row, c.col);
+  if (fc == ko_point) {
+    printf("ILLEGAL MOVE: ko violation at (%d, %d)\n", c.row, c.col);
     return;
   }
 
@@ -204,10 +209,8 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
 
   for (int i = 0; i < 4; i++) {
     int fn = all_neighbors[fc][i];
-    if (fn != -1) {
-      if (board[fn] != EMPTY && board[fn] != color)
-        push(fn, &opp_stones);
-    }
+    if (board[fn] != EMPTY && board[fn] != color)
+      push(fn, &opp_stones);
   }
 
   int unsigned captured_stone_count = 0;
@@ -235,7 +238,7 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
 
   if (fc_libs == 0) {
     board[fc] = EMPTY;
-    printf("ILLEGAL MOVE: Suicide at (%d, %d)\n", c.row, c.col);
+    printf("ILLEGAL MOVE: suicide at (%d, %d)\n", c.row, c.col);
     free(opp_stones.buffer);
     return;
   }
@@ -339,80 +342,48 @@ int main() {
   construct(&reached);
 
   // Claude generated test
-  move((Coord2){0, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  // --- Closed ring test: hollow 5x5 Black square enclosing 3x3 territory ---
+
+  // Top edge of the ring
+  move((Coord2){5, 5}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){0, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){5, 6}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){1, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){5, 7}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){1, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){5, 8}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){2, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){5, 9}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){2, 5}, board, all_neighbors, &reached, &chain, WHITE);
+
+  // Right edge of the ring
+  move((Coord2){6, 9}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){3, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){7, 9}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){3, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){8, 9}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){4, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){9, 9}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){4, 5}, board, all_neighbors, &reached, &chain, WHITE);
+
+  // Bottom edge of the ring
+  move((Coord2){9, 8}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){5, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){9, 7}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){5, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){9, 6}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){6, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){9, 5}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){6, 5}, board, all_neighbors, &reached, &chain, WHITE);
+
+  // Left edge of the ring (closing the loop)
+  move((Coord2){8, 5}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){7, 3}, board, all_neighbors, &reached, &chain, BLACK);
+  move((Coord2){7, 5}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){7, 5}, board, all_neighbors, &reached, &chain, WHITE);
+  move((Coord2){6, 5}, board, all_neighbors, &reached, &chain, BLACK);
   show_board(board);
-  move((Coord2){8, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){8, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){9, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){9, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){10, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){10, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){11, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){11, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){12, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){12, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){13, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){13, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){14, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){14, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){15, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){15, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){16, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){16, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){17, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){17, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-  move((Coord2){18, 3}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
+
   move((Coord2){18, 5}, board, all_neighbors, &reached, &chain, WHITE);
   show_board(board);
 
