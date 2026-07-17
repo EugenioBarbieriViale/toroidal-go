@@ -25,7 +25,7 @@ emcc src/$filename.c -o $filename.html \
   --shell-file ./external/raylib/src/shell.html \
   -DPLATFORM_WEB
 
-emrun $filename.html
+emrun $filename.html --browser firefox
 
 # gcc src/main.c -o main \
 #   -I raylib/src \
