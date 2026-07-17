@@ -1,2 +1,7 @@
 main
 rules
+emsdk/
+*.html
+*.js
+*.wasm
+ems_build_raylib.sh
