@@ -1,6 +1,7 @@
+external/emsdk/
+
 main
 rules
-emsdk/
 *.html
 *.js
 *.wasm
