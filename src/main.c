@@ -1,9 +1,17 @@
 // TODO
 // - nearest intersection must also be in view field
 
-#include <raylib.h>
-#include <raymath.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+#if defined(PLATFORM_WEB)
+#include "./external/raylib/src/raylib.h"
+#include "./external/raylib/src/raymath.h"
+#include <emscripten/emscripten.h>
+#else
+#include "raylib.h"
+#include "raymath.h"
+#endif
 
 #define W 800
 #define H 600
@@ -45,6 +53,20 @@ typedef struct {
 
 void install_map(HashItem[], Vector3[], Coord2[]);
 Coord2 *lookup(HashItem[], Vector3);
+
+void UpdateDrawFrame(void *);
+
+typedef struct {
+  Camera camera;
+  Model torus;
+  Model black;
+  Model white;
+  Vector3 *stones;
+  Vector3 *sorted_inters;
+  Coord2 *coords;
+  HashItem *hashmap;
+  int count;
+} MainLoopArg;
 
 int main() {
   InitWindow(W, H, "Toroidal Go");
@@ -91,78 +113,103 @@ int main() {
       printf("NO CORRESPONDING KEY OF ELEMENT %d\n", i);
   }
 
+  MainLoopArg *main_loop_arg = (MainLoopArg *)malloc(sizeof(MainLoopArg));
+  main_loop_arg->camera = camera;
+  main_loop_arg->torus = torus;
+  main_loop_arg->black = black;
+  main_loop_arg->white = white;
+  main_loop_arg->stones = stones;
+  main_loop_arg->sorted_inters = sorted_inters;
+  main_loop_arg->coords = coords;
+  main_loop_arg->hashmap = hashmap;
+  main_loop_arg->count = 0;
+
+#if defined(PLATFORM_WEB)
+  emscripten_set_main_loop_arg(UpdateDrawFrame, main_loop_arg, 0, 1);
+#else
   SetTargetFPS(FPS);
   DisableCursor();
 
-  int count = 0;
   while (!WindowShouldClose()) {
-    UpdateCameraPro(
-        &camera,
-        (Vector3){
-            (!IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
-                    0.2f - // Move forward-backward
-                (!IsKeyDown(KEY_SPACE) &&
-                 (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
-                    0.2f,
-            (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) *
-                    0.2f - // Move right-left
-                (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) * 0.2f,
-            (IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
-                    0.2f - // Move up-down
-                (IsKeyDown(KEY_SPACE) &&
-                 (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
-                    0.2f},
-        (Vector3){
-            GetMouseDelta().x * 0.05f, // Rotation: yaw
-            GetMouseDelta().y * 0.05f, // Rotation: pitch
-            0.0f                       // Rotation: roll
-        },
-        GetMouseWheelMove() * 2.0f);
-
-    sort_inters(sorted_inters, camera.position);
-
-    if (IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_ENTER)) {
-      stones[count] = sorted_inters[1];
-      count++;
-    } else if (IsKeyPressed(KEY_ENTER)) {
-      stones[count] = sorted_inters[0];
-      count++;
-    }
-
-    BeginDrawing();
-    ClearBackground(GRAY);
-
-    BeginMode3D(camera);
-
-    DrawModel(torus, ORIGIN, 1, BEIGE);
-
-    draw_inters(sorted_inters);
-
-    for (int i = 0; i < N_INTERS; i++) {
-      if (IS_ZERO(stones[i]))
-        continue;
-
-      Coord2 c = *lookup(hashmap, stones[i]);
-
-      if (i % 2 == 0) {
-        DrawModel(black, stones[i], 1, GRAY);
-      } else {
-        DrawModel(white, stones[i], 1, WHITE);
-      }
-    }
-
-    EndMode3D();
-    EndDrawing();
+    UpdateDrawFrame(main_loop_arg);
   }
+#endif
 
   UnloadModel(torus);
   UnloadModel(black);
   UnloadModel(white);
 
   UnloadTexture(texture);
+
+  free(main_loop_arg);
   CloseWindow();
 
   return 0;
+}
+
+void UpdateDrawFrame(void *arg_) {
+#if defined(PLATFORM_WEB)
+  DisableCursor();
+#endif
+
+  MainLoopArg *arg = arg_;
+
+  UpdateCameraPro(
+      &arg->camera,
+      (Vector3){
+          (!IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
+                  0.2f - // Move forward-backward
+              (!IsKeyDown(KEY_SPACE) &&
+               (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
+                  0.2f,
+          (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) * 0.2f - // Move right-left
+              (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) * 0.2f,
+          (IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
+                  0.2f - // Move up-down
+              (IsKeyDown(KEY_SPACE) &&
+               (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
+                  0.2f},
+      (Vector3){
+          GetMouseDelta().x * 0.05f, // Rotation: yaw
+          GetMouseDelta().y * 0.05f, // Rotation: pitch
+          0.0f                       // Rotation: roll
+      },
+      GetMouseWheelMove() * 2.0f);
+
+  sort_inters(arg->sorted_inters, arg->camera.position);
+
+  if (IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_ENTER)) {
+    arg->stones[arg->count] = arg->sorted_inters[1];
+    arg->count++;
+  } else if (IsKeyPressed(KEY_ENTER)) {
+    arg->stones[arg->count] = arg->sorted_inters[0];
+    arg->count++;
+  }
+
+  BeginDrawing();
+  ClearBackground(GRAY);
+
+  BeginMode3D(arg->camera);
+
+  DrawModel(arg->torus, ORIGIN, 1, BEIGE);
+
+  draw_inters(arg->sorted_inters);
+
+  for (int i = 0; i < N_INTERS; i++) {
+    if (IS_ZERO(arg->stones[i]))
+      continue;
+
+    Coord2 c = *lookup(arg->hashmap, arg->stones[i]);
+
+    if (i % 2 == 0) {
+      DrawModel(arg->black, arg->stones[i], 1, GRAY);
+    } else {
+      DrawModel(arg->white, arg->stones[i], 1, WHITE);
+    }
+  }
+
+  EndMode3D();
+  EndDrawing();
 }
 
 void compute_inters(Vector3 intersections[]) {
