@@ -22,8 +22,8 @@ emcc src/$filename.c -o $filename.html \
   -I. -I./external/raylib/src/raylib.h \
   -L. -L./external/raylib/src/libraylib.a \
   -s USE_GLFW=3 \
-  --shell-file ./external/raylib/src/shell.html \
   -DPLATFORM_WEB
+  # --shell-file ./external/raylib/src/shell.html \
 
 emrun $filename.html --browser firefox
 

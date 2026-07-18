@@ -1,0 +1,33 @@
+[
+  {
+    "file": "src/test.c",
+    "arguments": [
+      "/home/eu/programming/tgo/external/emsdk/upstream/bin/clang",
+      "-target",
+      "wasm32-unknown-emscripten",
+      "-fignore-exceptions",
+      "-mllvm",
+      "-combiner-global-alias-analysis=false",
+      "-mllvm",
+      "-enable-emscripten-sjlj",
+      "-mllvm",
+      "-disable-lsr",
+      "--sysroot=/home/eu/programming/tgo/external/emsdk/upstream/emscripten/cache/sysroot",
+      "-Xclang",
+      "-iwithsysroot/include/fakesdl",
+      "-Xclang",
+      "-iwithsysroot/include/compat",
+      "-Os",
+      "-Wall",
+      "-I.",
+      "-I./external/raylib/src/raylib.h",
+      "-DPLATFORM_WEB",
+      "-c",
+      "src/test.c",
+      "-o",
+      "/tmp/emscripten_temp_wie9mlig/test.o"
+    ],
+    "directory": "/home/eu/programming/tgo",
+    "output": "/tmp/emscripten_temp_wie9mlig/test.o"
+  }
+]
