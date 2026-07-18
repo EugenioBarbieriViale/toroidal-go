@@ -1,6 +1,6 @@
 [
   {
-    "file": "src/test.c",
+    "file": "src/main.c",
     "arguments": [
       "/home/eu/programming/tgo/external/emsdk/upstream/bin/clang",
       "-target",
@@ -17,17 +17,16 @@
       "-iwithsysroot/include/fakesdl",
       "-Xclang",
       "-iwithsysroot/include/compat",
-      "-Os",
-      "-Wall",
       "-I.",
       "-I./external/raylib/src/raylib.h",
       "-DPLATFORM_WEB",
+      "-Os",
       "-c",
-      "src/test.c",
+      "src/main.c",
       "-o",
-      "/tmp/emscripten_temp_wie9mlig/test.o"
+      "/tmp/emscripten_temp_k46xvhsp/main.o"
     ],
     "directory": "/home/eu/programming/tgo",
-    "output": "/tmp/emscripten_temp_wie9mlig/test.o"
+    "output": "/tmp/emscripten_temp_k46xvhsp/main.o"
   }
 ]

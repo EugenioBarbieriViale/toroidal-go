@@ -2,7 +2,7 @@ external/emsdk/
 
 main
 rules
-*.html
-*.js
-*.wasm
-ems_build_raylib.sh
+main.html
+main.js
+main.wasm
+main.data
