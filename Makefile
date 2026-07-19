@@ -1,27 +1,40 @@
 CC = gcc
 EMCC = emcc
-DBG_CFLAGS = -g -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
+
+CFLAGS = -g -O2
+DBG_CFLAGS = -g -O2 -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
+WEB_CFLAGS = -Os -s USE_GLFW=3 -s -s TOTAL_STACK=64MB -s INITIAL_MEMORY=128MB -s ASSERTIONS --preload-file assets -DPLATFORM_WEB
+
+EMSDK_ENV = /home/eu/programming/tgo/external/emsdk/emsdk_env.sh
+RAYLIB_SRC = /home/eu/programming/tgo/external/raylib/src
+RAYLIB_WEB_LIB = $(RAYLIB_SRC)/libraylib.a
+RAYLIB_WEB_CFLAGS = -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
+RAYLIB_WEB_OBJS = rcore.o rshapes.o rtextures.o rtext.o rmodels.o raudio.o
 
 native: src/main.c
 	$(CC) src/main.c -o main \
 		-I raylib/src \
 		-L raylib/src \
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
-		-g -O2
+		$(CFLAGS)
+
+web_raylib:
+	source $(EMSDK_ENV) && \
+	cd $(RAYLIB_SRC) && \
+	emcc -c rcore.c     $(RAYLIB_WEB_CFLAGS) && \
+	emcc -c rshapes.c   $(RAYLIB_WEB_CFLAGS) && \
+	emcc -c rtextures.c $(RAYLIB_WEB_CFLAGS) && \
+	emcc -c rtext.c     $(RAYLIB_WEB_CFLAGS) && \
+	emcc -c rmodels.c   $(RAYLIB_WEB_CFLAGS) && \
+	emcc -c raudio.c    -Os -Wall -DPLATFORM_WEB && \
+	emar rcs libraylib.a $(WEB_OBJS)
 
 web: src/main.c
 	$(EMCC) src/main.c -o main.html \
 		./external/raylib/src/libraylib.a \
 		-I. -I./external/raylib/src/raylib.h \
 		-L. -L./external/raylib/src/libraylib.a \
-		-s USE_GLFW=3 \
-		-s ALLOW_MEMORY_GROWTH=1 \
-	 	-s TOTAL_STACK=64MB \
-    -s INITIAL_MEMORY=128MB \
-    -s ASSERTIONS \
-		--preload-file assets \
-		-DPLATFORM_WEB \
-		-Os
+		$(WEB_CFLAGS)
 
 debug: src/main.c
 	$(CC) src/main.c -o main \

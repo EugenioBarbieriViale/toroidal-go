@@ -1,7 +1,7 @@
 // TODO
 // - nearest intersection must also be in view field
+// - iterate through sorted intersections
 
-#include <stdio.h>
 #include <stdlib.h>
 
 #if defined(PLATFORM_WEB)
@@ -35,41 +35,35 @@
 
 const Vector3 ORIGIN = {0.f, 0.f, 0.f};
 
-void compute_inters(Vector3[]);
-void sort_inters(Vector3[], Vector3);
-void draw_inters(Vector3[]);
-
-typedef struct {
-  int row;
-  int col;
-} Coord2;
-
-void get_board_coords(Coord2[]);
-
-typedef struct {
-  Vector3 key;
-  Coord2 value;
-} HashItem;
-
-void install_map(HashItem[], Vector3[], Coord2[]);
-Coord2 *lookup(HashItem[], Vector3);
-
-void UpdateDrawFrame(void *);
-
 typedef struct {
   Camera camera;
+
   Model torus;
   Model black;
   Model white;
+
   Vector3 *stones;
+  Vector3 *intersections;
   Vector3 *sorted_inters;
-  Coord2 *coords;
-  HashItem *hashmap;
+
+  int sorted_count;
+  int stone_skips;
   int count;
 } MainLoopArg;
 
+void compute_inters(Vector3[]);
+void sort_inters(Vector3[], Vector3);
+void draw_inters(int, Vector3[]);
+
+int Vector3cmp(Vector3 *, Vector3 *);
+int get_stone_idx(Vector3 *, Vector3[]);
+
+void place_stone(MainLoopArg *);
+void UpdateDrawFrame(void *);
+
 int main() {
   InitWindow(W, H, "Toroidal Go");
+  DisableCursor();
 
   Camera camera = {0};
   camera.position = (Vector3){10.f, 10.f, 10.f};
@@ -98,37 +92,28 @@ int main() {
   Vector3 intersections[N_INTERS];
   compute_inters(intersections);
 
-  // hmmmmm
   Vector3 sorted_inters[N_INTERS];
   compute_inters(sorted_inters);
 
-  Coord2 coords[N_INTERS];
-  get_board_coords(coords);
-
-  HashItem hashmap[N_INTERS];
-  install_map(hashmap, intersections, coords);
-
-  for (int i = 0; i < N_INTERS; i++) {
-    if (lookup(hashmap, intersections[i]) == NULL)
-      printf("NO CORRESPONDING KEY OF ELEMENT %d\n", i);
-  }
-
   MainLoopArg *main_loop_arg = (MainLoopArg *)malloc(sizeof(MainLoopArg));
   main_loop_arg->camera = camera;
+
   main_loop_arg->torus = torus;
   main_loop_arg->black = black;
   main_loop_arg->white = white;
+
   main_loop_arg->stones = stones;
+  main_loop_arg->intersections = intersections;
   main_loop_arg->sorted_inters = sorted_inters;
-  main_loop_arg->coords = coords;
-  main_loop_arg->hashmap = hashmap;
+
+  main_loop_arg->stone_skips = 0;
+  main_loop_arg->sorted_count = 0;
   main_loop_arg->count = 0;
 
 #if defined(PLATFORM_WEB)
   emscripten_set_main_loop_arg(UpdateDrawFrame, main_loop_arg, 0, 1);
 #else
   SetTargetFPS(FPS);
-  DisableCursor();
 
   while (!WindowShouldClose()) {
     UpdateDrawFrame(main_loop_arg);
@@ -148,10 +133,6 @@ int main() {
 }
 
 void UpdateDrawFrame(void *arg_) {
-#if defined(PLATFORM_WEB)
-  DisableCursor();
-#endif
-
   MainLoopArg *arg = arg_;
 
   UpdateCameraPro(
@@ -177,14 +158,7 @@ void UpdateDrawFrame(void *arg_) {
       GetMouseWheelMove() * 2.0f);
 
   sort_inters(arg->sorted_inters, arg->camera.position);
-
-  if (IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_ENTER)) {
-    arg->stones[arg->count] = arg->sorted_inters[1];
-    arg->count++;
-  } else if (IsKeyPressed(KEY_ENTER)) {
-    arg->stones[arg->count] = arg->sorted_inters[0];
-    arg->count++;
-  }
+  place_stone(arg);
 
   BeginDrawing();
   ClearBackground(GRAY);
@@ -193,13 +167,11 @@ void UpdateDrawFrame(void *arg_) {
 
   DrawModel(arg->torus, ORIGIN, 1, BEIGE);
 
-  draw_inters(arg->sorted_inters);
+  draw_inters(arg->sorted_count, arg->sorted_inters);
 
   for (int i = 0; i < N_INTERS; i++) {
     if (IS_ZERO(arg->stones[i]))
       continue;
-
-    Coord2 c = *lookup(arg->hashmap, arg->stones[i]);
 
     if (i % 2 == 0) {
       DrawModel(arg->black, arg->stones[i], 1, GRAY);
@@ -210,6 +182,40 @@ void UpdateDrawFrame(void *arg_) {
 
   EndMode3D();
   EndDrawing();
+}
+
+int Vector3cmp(Vector3 *v, Vector3 *w) {
+  return (IS_EQUALF(v->x, w->x) && IS_EQUALF(v->y, w->y) &&
+          IS_EQUALF(v->z, w->z));
+}
+
+int get_stone_idx(Vector3 *s, Vector3 stones[]) {
+  for (int i = 0; i < N_INTERS; i++) {
+    if (Vector3cmp(&stones[i], s))
+      return i;
+  }
+  return -1;
+}
+
+void place_stone(MainLoopArg *arg) {
+  // check if another stone has already been placed in that position
+  arg->sorted_count = 0;
+  while (get_stone_idx(&arg->sorted_inters[arg->sorted_count], arg->stones) !=
+         -1) {
+    if (arg->sorted_count >= N_INTERS)
+      break;
+    arg->sorted_count++;
+  }
+
+  if (IsKeyPressed(KEY_E) && IsKeyDown(KEY_LEFT_SHIFT))
+    arg->sorted_count--;
+  else if (IsKeyPressed(KEY_E))
+    arg->sorted_count++;
+
+  if (IsKeyPressed(KEY_ENTER)) {
+    arg->stones[arg->count++] = arg->sorted_inters[arg->sorted_count];
+    arg->sorted_count = 0;
+  }
 }
 
 void compute_inters(Vector3 intersections[]) {
@@ -248,7 +254,7 @@ void sort_inters(Vector3 intersections[], Vector3 cam_pos) {
   }
 }
 
-void draw_inters(Vector3 sorted_inters[]) {
+void draw_inters(int sorted_count, Vector3 sorted_inters[]) {
   for (int i = 0; i < N_INTERS; i++) {
     Vector3 v = sorted_inters[i];
 
@@ -256,41 +262,10 @@ void draw_inters(Vector3 sorted_inters[]) {
       continue;
 
     Color color = RED;
-    if (i == 0)
+    if (i == sorted_count)
       color = GREEN;
-    else if (i == 1)
-      color = YELLOW;
 
     DrawCubeV(v, (Vector3){0.2f, 0.2f, 0.2f}, color);
     DrawCubeWiresV(v, (Vector3){0.2f, 0.2f, 0.2f}, BLACK);
   }
-}
-
-void get_board_coords(Coord2 coords[]) {
-  for (int i = 0; i < N_INTERS; i++) {
-    coords[i].row = (int)(i / N_LINES);
-    coords[i].col = i % N_LINES;
-  }
-}
-
-void install_map(HashItem hashmap[], Vector3 intersections[], Coord2 coords[]) {
-  HashItem h;
-  for (int i = 0; i < N_INTERS; i++) {
-    h.key = intersections[i];
-    h.value = coords[i];
-    hashmap[i] = h;
-  }
-}
-
-int Vector3cmp(Vector3 v, Vector3 w) {
-  return (IS_EQUALF(v.x, w.x) && IS_EQUALF(v.y, w.y) && IS_EQUALF(v.z, w.z));
-}
-
-Coord2 *lookup(HashItem hashmap[], Vector3 key) {
-  for (int i = 0; i < N_INTERS; i++) {
-    if (Vector3cmp(hashmap[i].key, key) == 0) {
-      return &hashmap[i].value;
-    }
-  }
-  return NULL;
 }
