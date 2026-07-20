@@ -1,29 +1,8 @@
-#include "stack.h"
+#include "rules.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-#define N_LINES 19
-#define N_INTERS (N_LINES * N_LINES)
-
-#define BLACK 'O'
-#define WHITE 'X'
-#define EMPTY '.'
-
 int ko_point = -1;
-
-typedef struct {
-  int row;
-  int col;
-} Coord2;
-
-int flatten(Coord2 c) { return N_LINES * c.row + c.col; }
-Coord2 unflatten(int fc) { return (Coord2){fc / N_LINES, fc % N_LINES}; }
-
-void init_board(char board[]) {
-  for (int i = 0; i < N_INTERS; i++) {
-    board[i] = '.';
-  }
-}
 
 void get_neighbors(int fc, int out[]) {
   Coord2 c = unflatten(fc);
@@ -40,13 +19,7 @@ void get_neighbors(int fc, int out[]) {
   }
 }
 
-void get_all_neighbors(int all_neighbors[][4]) {
-  for (int fc = 0; fc < N_INTERS; fc++) {
-    get_neighbors(fc, all_neighbors[fc]);
-  }
-}
-
-int get_idx_int(int elem, int len, int arr[]) {
+int get_idx(int elem, int len, int arr[]) {
   for (int i = 0; i < len; i++) {
     if (elem == arr[i])
       return i;
@@ -54,21 +27,9 @@ int get_idx_int(int elem, int len, int arr[]) {
   return -1;
 }
 
-int get_idx_char(char elem, int len, char arr[]) {
-  for (int i = 0; i < len; i++) {
-    if (elem == arr[i])
-      return i;
-  }
-  return -1;
-}
-
-// useless, make board full int
-#define get_idx(elem, len, arr)                                                \
-  _Generic((arr), int *: get_idx_int, char *: get_idx_char)(elem, len, arr)
-
-void flood_fill(int fc, char board[], int all_neighbors[][4], Stack *reached,
+void flood_fill(int fc, int board[], int all_neighbors[][4], Stack *reached,
                 Stack *chain) {
-  char color = board[fc];
+  int color = board[fc];
 
   Stack frontier;
   construct(&frontier);
@@ -97,7 +58,7 @@ void flood_fill(int fc, char board[], int all_neighbors[][4], Stack *reached,
   free(frontier.buffer);
 }
 
-int unsigned get_liberties(int fc, char board[], int all_neighbors[][4],
+int unsigned get_liberties(int fc, int board[], int all_neighbors[][4],
                            Stack *reached, Stack *chain) {
   reached->top = -1;
   chain->top = -1;
@@ -113,7 +74,7 @@ int unsigned get_liberties(int fc, char board[], int all_neighbors[][4],
   return liberties;
 }
 
-int maybe_capture(unsigned int libs, char board[], Stack *chain) {
+int maybe_capture(unsigned int libs, int board[], Stack *chain) {
   if (libs == 0) {
     for (int i = 0; i <= chain->top; i++) {
       int fc = chain->buffer[i];
@@ -124,17 +85,8 @@ int maybe_capture(unsigned int libs, char board[], Stack *chain) {
   return 0;
 }
 
-int is_on_board(Coord2 c) {
-  return c.row >= 0 && c.row < N_LINES && c.col >= 0 && c.col < N_LINES;
-}
-
-void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
-          Stack *chain, char color) {
-  if (!is_on_board(c)) {
-    printf("ILLEGAL MOVE: out of bounds (%d, %d)\n", c.row, c.col);
-    return;
-  }
-
+void move(Coord2 c, int board[], int all_neighbors[][4], Stack *reached,
+          Stack *chain, int color) {
   int fc = flatten(c);
 
   if (board[fc] != EMPTY) {
@@ -199,14 +151,9 @@ void move(Coord2 c, char board[], int all_neighbors[][4], Stack *reached,
   free(opp_stones.buffer);
 }
 
-void clone_arr(char from[], char to[], int len) {
-  for (int i = 0; i < len; i++)
-    to[i] = from[i];
-}
-
-void score(char board[], int all_neighbors[][4], int *black_score,
+void score(int board[], int all_neighbors[][4], int *black_score,
            int *white_score) {
-  char score_board[N_INTERS];
+  int score_board[N_INTERS];
   clone_arr(board, score_board, N_INTERS);
 
   Stack empties;
@@ -229,7 +176,7 @@ void score(char board[], int all_neighbors[][4], int *black_score,
     if (borders.top == -1)
       break;
 
-    char maybe_border_color = score_board[borders.buffer[0]];
+    int maybe_border_color = score_board[borders.buffer[0]];
     int all_same_color = 1;
 
     for (int i = 0; i <= borders.top; i++) {
@@ -260,87 +207,4 @@ void score(char board[], int all_neighbors[][4], int *black_score,
 
   free(empties.buffer);
   free(borders.buffer);
-}
-
-void show_board(char board[]) {
-  printf("*---------------------------------------------------------*\n");
-  for (int i = 0; i < N_LINES; i++) {
-    printf("|");
-    for (int j = 0; j < N_LINES; j++) {
-      int fc = flatten((Coord2){i, j});
-      printf(" %c ", board[fc]);
-    }
-    printf("|\n");
-  }
-  printf("*---------------------------------------------------------*\n");
-}
-
-int main() {
-  char board[N_INTERS];
-  init_board(board);
-
-  int all_neighbors[N_INTERS][4];
-  get_all_neighbors(all_neighbors);
-
-  Stack chain;
-  construct(&chain);
-
-  Stack reached;
-  construct(&reached);
-
-  // Claude generated test
-  // --- Closed ring test: hollow 5x5 Black square enclosing 3x3 territory ---
-
-  // Top edge of the ring
-  move((Coord2){5, 5}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){5, 6}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){5, 7}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){5, 8}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){5, 9}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-
-  // Right edge of the ring
-  move((Coord2){6, 9}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){7, 9}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){8, 9}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){9, 9}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-
-  // Bottom edge of the ring
-  move((Coord2){9, 8}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){9, 7}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){9, 6}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){9, 5}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-
-  // Left edge of the ring (closing the loop)
-  move((Coord2){8, 5}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){7, 5}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-  move((Coord2){6, 5}, board, all_neighbors, &reached, &chain, BLACK);
-  show_board(board);
-
-  move((Coord2){18, 5}, board, all_neighbors, &reached, &chain, WHITE);
-  show_board(board);
-
-  int black_score, white_score = 0;
-  score(board, all_neighbors, &black_score, &white_score);
-
-  printf("BLACK SCORE: %d, WHITE SCORE: %d\n", black_score, white_score);
-
-  free(chain.buffer);
-  free(reached.buffer);
-
-  return 0;
 }

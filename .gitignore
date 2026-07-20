@@ -2,6 +2,8 @@ external/emsdk/
 
 main
 rules
+server
+
 main.html
 main.js
 main.wasm
