@@ -1,6 +1,5 @@
 // TODO
-// - nearest intersection must also be in view field
-// - iterate through sorted intersections
+// - if not moving, show cursor and let click to place stones
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +37,7 @@ static inline float dist(Vector3 v, Vector3 w) {
 #define N_INTERS (N_LINES * N_LINES)
 #define UNIT_ANGLE (2.f * PI / (float)N_LINES)
 
+const float COLLISION_RADIUS = 0.2f;
 const Vector3 ORIGIN = {0.f, 0.f, 0.f};
 
 typedef struct {
@@ -52,26 +52,35 @@ typedef struct {
   Vector3 *sorted_inters;
 
   Vector3 focused_stone;
+
   int count_from_sorted;
   int count;
 } MainLoopArg;
+
+void UpdateDrawFrame(void *);
+
+int get_stone_idx(Vector3 *, Vector3 *);
+void pop_stone(int, int, Vector3 **);
+void make_move(MainLoopArg *);
+void place_stone_keyboard(MainLoopArg *);
+void place_stone_mouse(Vector3 *, MainLoopArg *);
 
 void compute_inters(Vector3 *);
 void sort_inters(int, Vector3 **, Vector3);
 void draw_inters(Vector3 *, Vector3 *);
 
-int get_stone_idx(Vector3 *, Vector3 *);
-void pop_stone(int, int, Vector3 **);
-
-void place_stone(MainLoopArg *);
-void UpdateDrawFrame(void *);
+static inline int is_moving(void) {
+  return (IsKeyDown(KEY_W) || IsKeyDown(KEY_S) || IsKeyDown(KEY_A) ||
+          IsKeyDown(KEY_D) || IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) ||
+          IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT));
+}
 
 int main() {
   InitWindow(W, H, "Toroidal Go");
   DisableCursor();
 
   Camera camera = {0};
-  camera.position = (Vector3){10.f, 10.f, 10.f};
+  camera.position = (Vector3){0.f, 0.f, 25.f};
   camera.target = ORIGIN;
   camera.up = (Vector3){0.0f, 1.0f, 0.0f};
   camera.fovy = 45.0f;
@@ -139,36 +148,51 @@ int main() {
   return 0;
 }
 
+void control_camera(Camera *camera, Vector3 *mouse_delta) {
+  static bool was_moving = false;
+  bool moving = is_moving();
+  if (moving && !was_moving)
+    DisableCursor();
+  if (!moving && was_moving)
+    EnableCursor();
+  was_moving = moving;
+
+  if (moving) {
+    *mouse_delta =
+        (Vector3){GetMouseDelta().x * 0.05f, GetMouseDelta().y * 0.05f, 0.0f};
+  } else {
+    *mouse_delta = ORIGIN;
+  }
+
+  UpdateCameraPro(
+      camera,
+      (Vector3){
+          (!IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
+                  0.3f -
+              (!IsKeyDown(KEY_SPACE) &&
+               (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
+                  0.3f,
+          (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) * 0.3f -
+              (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) * 0.3f,
+          (IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
+                  0.3f -
+              (IsKeyDown(KEY_SPACE) &&
+               (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
+                  0.3f},
+      *mouse_delta, GetMouseWheelMove() * 2.0f);
+}
+
 void UpdateDrawFrame(void *arg_) {
   MainLoopArg *arg = arg_;
 
-  UpdateCameraPro(
-      &arg->camera,
-      (Vector3){
-          (!IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
-                  0.2f - // Move forward-backward
-              (!IsKeyDown(KEY_SPACE) &&
-               (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
-                  0.2f,
-          (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) * 0.2f - // Move right-left
-              (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) * 0.2f,
-          (IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
-                  0.2f - // Move up-down
-              (IsKeyDown(KEY_SPACE) &&
-               (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
-                  0.2f},
-      (Vector3){
-          GetMouseDelta().x * 0.05f, // Rotation: yaw
-          GetMouseDelta().y * 0.05f, // Rotation: pitch
-          0.0f                       // Rotation: roll
-      },
-      GetMouseWheelMove() * 2.0f);
-
-  // count is still not updated here
   int new_len = N_INTERS - arg->count;
   sort_inters(new_len, &arg->sorted_inters, arg->camera.position);
 
-  place_stone(arg);
+  Vector3 mouse_delta;
+  control_camera(&arg->camera, &mouse_delta);
+
+  place_stone_keyboard(arg);
+  place_stone_mouse(&mouse_delta, arg);
 
   BeginDrawing();
   ClearBackground(GRAY);
@@ -176,7 +200,6 @@ void UpdateDrawFrame(void *arg_) {
   BeginMode3D(arg->camera);
 
   DrawModel(arg->torus, ORIGIN, 1, BEIGE);
-
   draw_inters(&arg->focused_stone, arg->intersections);
 
   for (int i = 0; i < N_INTERS; i++) {
@@ -191,6 +214,9 @@ void UpdateDrawFrame(void *arg_) {
   }
 
   EndMode3D();
+
+  DrawText(TextFormat("%.2f", 1.f / GetFrameTime()), 10, 10, 20, WHITE);
+
   EndDrawing();
 }
 
@@ -224,22 +250,51 @@ void pop_stone(int idx, int last_idx, Vector3 **sorted_inters) {
   }
 }
 
-void place_stone(MainLoopArg *arg) {
+void make_move(MainLoopArg *arg) {
+  arg->stones[arg->count++] = arg->focused_stone;
+
+  int last_idx = N_INTERS - arg->count - 1;
+  pop_stone(arg->count_from_sorted, last_idx, &arg->sorted_inters);
+}
+
+void place_stone_keyboard(MainLoopArg *arg) {
   if (IsKeyPressed(KEY_E) && IsKeyDown(KEY_LEFT_SHIFT)) {
     if (arg->count_from_sorted > 0)
       arg->count_from_sorted--;
   } else if (IsKeyPressed(KEY_E) && arg->count_from_sorted < N_INTERS)
     arg->count_from_sorted++;
 
+  // make the user choose (later implement)
+  if (is_moving())
+    arg->count_from_sorted = 0;
+
   arg->focused_stone = arg->sorted_inters[arg->count_from_sorted];
 
   if (IsKeyPressed(KEY_ENTER)) {
-    arg->stones[arg->count++] = arg->focused_stone;
-
-    int last_idx = N_INTERS - arg->count - 1;
-    pop_stone(arg->count_from_sorted, last_idx, &arg->sorted_inters);
-
+    make_move(arg);
     arg->count_from_sorted = 0;
+  }
+}
+
+void place_stone_mouse(Vector3 *mouse_delta, MainLoopArg *arg) {
+  if (!ARE_EQUAL(*mouse_delta, ORIGIN))
+    return;
+
+  Ray ray = GetScreenToWorldRay(GetMousePosition(), arg->camera);
+
+  for (int i = 0; i < N_INTERS; i++) {
+    RayCollision collision =
+        GetRayCollisionSphere(ray, arg->intersections[i], COLLISION_RADIUS);
+
+    if (collision.hit && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      // FIX THIS LOGIC
+      arg->focused_stone = arg->intersections[i];
+      arg->count_from_sorted =
+          get_stone_idx(&arg->intersections[i], arg->intersections);
+      make_move(arg);
+      arg->count_from_sorted = 0;
+      break;
+    }
   }
 }
 

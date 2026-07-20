@@ -7,18 +7,7 @@
       "-o",
       "main",
       "-g",
-      "-Os",
-      "-Wall",
-      "-Wextra",
-      "-Wconversion",
-      "-Wfloat-equal",
-      "-Wunreachable-code",
-      "-Wno-free-nonheap-object",
-      "-Wdouble-promotion",
-      "-Wformat",
-      "-Wpedantic",
-      "-fsanitize=address",
-      "-fsanitize=undefined"
+      "-Os"
     ],
     "directory": "/home/eu/programming/tgo",
     "output": "main"
