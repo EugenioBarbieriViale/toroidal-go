@@ -48,6 +48,7 @@ typedef struct {
   Vector3 *stones;
   Vector3 *intersections;
   Vector3 *sorted_inters;
+  int *board_state;
 
   Vector3 focused_stone;
   int count_from_closest;
@@ -108,6 +109,10 @@ int main() {
   Vector3 *sorted_inters = (Vector3 *)malloc(N_INTERS * sizeof(Vector3));
   compute_inters(sorted_inters);
 
+  int board_state[N_INTERS];
+  for (int i = 0; i < N_INTERS; i++)
+    board_state[i] = 0;
+
   MainLoopArg *main_loop_arg = (MainLoopArg *)malloc(sizeof(MainLoopArg));
   main_loop_arg->camera = camera;
 
@@ -118,6 +123,7 @@ int main() {
   main_loop_arg->stones = stones;
   main_loop_arg->intersections = intersections;
   main_loop_arg->sorted_inters = sorted_inters;
+  main_loop_arg->board_state = board_state;
 
   main_loop_arg->focused_stone = sorted_inters[0];
   main_loop_arg->count_from_closest = 0;
@@ -322,6 +328,8 @@ void place_stone_keyboard(MainLoopArg *arg) {
   arg->focused_stone = arg->sorted_inters[arg->count_from_closest];
 
   if (IsKeyPressed(KEY_ENTER)) {
+    arg->board_state[arg->count_from_closest] = 1;
+    // send to server game state, if return is positive make let place stone
     arg->stones[arg->count++] = arg->focused_stone;
 
     int last_idx = N_INTERS - arg->count - 1;
@@ -343,6 +351,8 @@ void place_stone_mouse(Vector3 *mouse_delta, MainLoopArg *arg) {
         GetRayCollisionSphere(ray, arg->sorted_inters[i], COLLISION_RADIUS);
 
     if (collision.hit && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      arg->board_state[i] = 1;
+      // send to server game state, if return is positive make let place stone
       arg->stones[arg->count++] = arg->sorted_inters[i];
       pop_stone(i, new_len - 1, &arg->sorted_inters);
       break;
