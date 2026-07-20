@@ -52,28 +52,23 @@ typedef struct {
   Vector3 *sorted_inters;
 
   Vector3 focused_stone;
-
-  int count_from_sorted;
+  int count_from_closest;
   int count;
+
+  int camera_mode;
 } MainLoopArg;
 
 void UpdateDrawFrame(void *);
+void control_camera(Camera *, Vector3 *, int *);
 
 int get_stone_idx(Vector3 *, Vector3 *);
 void pop_stone(int, int, Vector3 **);
-void make_move(MainLoopArg *);
 void place_stone_keyboard(MainLoopArg *);
 void place_stone_mouse(Vector3 *, MainLoopArg *);
 
 void compute_inters(Vector3 *);
 void sort_inters(int, Vector3 **, Vector3);
 void draw_inters(Vector3 *, Vector3 *);
-
-static inline int is_moving(void) {
-  return (IsKeyDown(KEY_W) || IsKeyDown(KEY_S) || IsKeyDown(KEY_A) ||
-          IsKeyDown(KEY_D) || IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) ||
-          IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT));
-}
 
 int main() {
   InitWindow(W, H, "Toroidal Go");
@@ -121,8 +116,9 @@ int main() {
   main_loop_arg->sorted_inters = sorted_inters;
 
   main_loop_arg->focused_stone = sorted_inters[0];
-  main_loop_arg->count_from_sorted = 0;
+  main_loop_arg->count_from_closest = 0;
   main_loop_arg->count = 0;
+  main_loop_arg->camera_mode = CAMERA_FIRST_PERSON;
 
 #if defined(PLATFORM_WEB)
   emscripten_set_main_loop_arg(UpdateDrawFrame, main_loop_arg, 0, 1);
@@ -148,12 +144,18 @@ int main() {
   return 0;
 }
 
-void control_camera(Camera *camera, Vector3 *mouse_delta) {
+static inline int is_moving(void) {
+  return (IsKeyDown(KEY_W) || IsKeyDown(KEY_S) || IsKeyDown(KEY_A) ||
+          IsKeyDown(KEY_D) || IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) ||
+          IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT));
+}
+
+void control_camera(Camera *camera, Vector3 *mouse_delta, int *camera_mode) {
   static bool was_moving = false;
   bool moving = is_moving();
   if (moving && !was_moving)
     DisableCursor();
-  if (!moving && was_moving)
+  if (*camera_mode != CAMERA_THIRD_PERSON && !moving && was_moving)
     EnableCursor();
   was_moving = moving;
 
@@ -164,22 +166,30 @@ void control_camera(Camera *camera, Vector3 *mouse_delta) {
     *mouse_delta = ORIGIN;
   }
 
-  UpdateCameraPro(
-      camera,
-      (Vector3){
-          (!IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
-                  0.3f -
-              (!IsKeyDown(KEY_SPACE) &&
-               (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
-                  0.3f,
-          (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) * 0.3f -
-              (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) * 0.3f,
-          (IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))) *
-                  0.3f -
-              (IsKeyDown(KEY_SPACE) &&
-               (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))) *
-                  0.3f},
-      *mouse_delta, GetMouseWheelMove() * 2.0f);
+  Vector3 movement = ORIGIN;
+  Vector3 rotation = *mouse_delta;
+  float zoom = -GetMouseWheelMove() * 2.0f;
+
+  if (IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)))
+    movement.z += 0.3f;
+  else if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))
+    movement.x += 0.3f;
+  if (IsKeyDown(KEY_SPACE) && (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)))
+    movement.z -= 0.3f;
+  else if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))
+    movement.x -= 0.3f;
+  if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT))
+    movement.y += 0.3f;
+  if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))
+    movement.y -= 0.3f;
+
+  if (*camera_mode == CAMERA_THIRD_PERSON) {
+    Vector2 mouseDelta = GetMouseDelta();
+    rotation.x = mouseDelta.x * 0.05f;
+    rotation.y = mouseDelta.y * 0.05f;
+  }
+
+  UpdateCameraPro(camera, movement, rotation, zoom);
 }
 
 void UpdateDrawFrame(void *arg_) {
@@ -188,8 +198,18 @@ void UpdateDrawFrame(void *arg_) {
   int new_len = N_INTERS - arg->count;
   sort_inters(new_len, &arg->sorted_inters, arg->camera.position);
 
+  if (IsKeyPressed(KEY_ONE)) {
+    arg->camera_mode = CAMERA_FIRST_PERSON;
+    arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
+  }
+
+  if (IsKeyPressed(KEY_TWO)) {
+    arg->camera_mode = CAMERA_THIRD_PERSON;
+    arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
+  }
+
   Vector3 mouse_delta;
-  control_camera(&arg->camera, &mouse_delta);
+  control_camera(&arg->camera, &mouse_delta, &arg->camera_mode);
 
   place_stone_keyboard(arg);
   place_stone_mouse(&mouse_delta, arg);
@@ -211,6 +231,11 @@ void UpdateDrawFrame(void *arg_) {
     } else {
       DrawModel(arg->white, arg->stones[i], 1, WHITE);
     }
+  }
+
+  if (arg->camera_mode == CAMERA_THIRD_PERSON) {
+    DrawCube(arg->camera.target, 0.5f, 0.5f, 0.5f, PURPLE);
+    DrawCubeWires(arg->camera.target, 0.5f, 0.5f, 0.5f, DARKPURPLE);
   }
 
   EndMode3D();
@@ -250,29 +275,26 @@ void pop_stone(int idx, int last_idx, Vector3 **sorted_inters) {
   }
 }
 
-void make_move(MainLoopArg *arg) {
-  arg->stones[arg->count++] = arg->focused_stone;
-
-  int last_idx = N_INTERS - arg->count - 1;
-  pop_stone(arg->count_from_sorted, last_idx, &arg->sorted_inters);
-}
-
 void place_stone_keyboard(MainLoopArg *arg) {
   if (IsKeyPressed(KEY_E) && IsKeyDown(KEY_LEFT_SHIFT)) {
-    if (arg->count_from_sorted > 0)
-      arg->count_from_sorted--;
-  } else if (IsKeyPressed(KEY_E) && arg->count_from_sorted < N_INTERS)
-    arg->count_from_sorted++;
+    if (arg->count_from_closest > 0)
+      arg->count_from_closest--;
+  } else if (IsKeyPressed(KEY_E) && arg->count_from_closest < N_INTERS)
+    arg->count_from_closest++;
 
   // make the user choose (later implement)
   if (is_moving())
-    arg->count_from_sorted = 0;
+    arg->count_from_closest = 0;
 
-  arg->focused_stone = arg->sorted_inters[arg->count_from_sorted];
+  arg->focused_stone = arg->sorted_inters[arg->count_from_closest];
 
   if (IsKeyPressed(KEY_ENTER)) {
-    make_move(arg);
-    arg->count_from_sorted = 0;
+    arg->stones[arg->count++] = arg->focused_stone;
+
+    int last_idx = N_INTERS - arg->count - 1;
+    pop_stone(arg->count_from_closest, last_idx, &arg->sorted_inters);
+
+    arg->count_from_closest = 0;
   }
 }
 
@@ -282,17 +304,14 @@ void place_stone_mouse(Vector3 *mouse_delta, MainLoopArg *arg) {
 
   Ray ray = GetScreenToWorldRay(GetMousePosition(), arg->camera);
 
-  for (int i = 0; i < N_INTERS; i++) {
+  int new_len = N_INTERS - arg->count;
+  for (int i = 0; i < new_len; i++) {
     RayCollision collision =
-        GetRayCollisionSphere(ray, arg->intersections[i], COLLISION_RADIUS);
+        GetRayCollisionSphere(ray, arg->sorted_inters[i], COLLISION_RADIUS);
 
     if (collision.hit && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-      // FIX THIS LOGIC
-      arg->focused_stone = arg->intersections[i];
-      arg->count_from_sorted =
-          get_stone_idx(&arg->intersections[i], arg->intersections);
-      make_move(arg);
-      arg->count_from_sorted = 0;
+      arg->stones[arg->count++] = arg->sorted_inters[i];
+      pop_stone(i, new_len - 1, &arg->sorted_inters);
       break;
     }
   }
