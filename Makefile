@@ -1,9 +1,9 @@
 CC = gcc
 EMCC = emcc
 
-CFLAGS = -g -O2
-DBG_CFLAGS = -g -O2 -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
-WEB_CFLAGS = -Os -s USE_GLFW=3 -s -s TOTAL_STACK=64MB -s INITIAL_MEMORY=128MB -s ASSERTIONS --preload-file assets -DPLATFORM_WEB
+CFLAGS = -g -Os
+DBG_CFLAGS = $(CFLAGS) -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
+WEB_CFLAGS = -Os -s USE_GLFW=3 -s TOTAL_STACK=64MB -s INITIAL_MEMORY=128MB -s ASSERTIONS --preload-file assets -DPLATFORM_WEB
 
 EMSDK_ENV = /home/eu/programming/tgo/external/emsdk/emsdk_env.sh
 RAYLIB_SRC = /home/eu/programming/tgo/external/raylib/src
@@ -13,8 +13,6 @@ RAYLIB_WEB_OBJS = rcore.o rshapes.o rtextures.o rtext.o rmodels.o raudio.o
 
 native: src/main.c
 	$(CC) src/main.c -o main \
-		-I raylib/src \
-		-L raylib/src \
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
 		$(CFLAGS)
 
@@ -38,8 +36,6 @@ web: src/main.c
 
 debug: src/main.c
 	$(CC) src/main.c -o main \
-		-I raylib/src \
-		-L raylib/src \
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
 		$(DBG_CFLAGS)
 

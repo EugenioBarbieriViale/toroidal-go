@@ -2,31 +2,25 @@
   {
     "file": "src/main.c",
     "arguments": [
-      "/home/eu/programming/tgo/external/emsdk/upstream/bin/clang",
-      "-target",
-      "wasm32-unknown-emscripten",
-      "-fignore-exceptions",
-      "-mllvm",
-      "-combiner-global-alias-analysis=false",
-      "-mllvm",
-      "-enable-emscripten-sjlj",
-      "-mllvm",
-      "-disable-lsr",
-      "--sysroot=/home/eu/programming/tgo/external/emsdk/upstream/emscripten/cache/sysroot",
-      "-Xclang",
-      "-iwithsysroot/include/fakesdl",
-      "-Xclang",
-      "-iwithsysroot/include/compat",
-      "-I.",
-      "-I./external/raylib/src/raylib.h",
-      "-DPLATFORM_WEB",
-      "-Os",
-      "-c",
+      "/usr/sbin/gcc",
       "src/main.c",
       "-o",
-      "/tmp/emscripten_temp_k46xvhsp/main.o"
+      "main",
+      "-g",
+      "-Os",
+      "-Wall",
+      "-Wextra",
+      "-Wconversion",
+      "-Wfloat-equal",
+      "-Wunreachable-code",
+      "-Wno-free-nonheap-object",
+      "-Wdouble-promotion",
+      "-Wformat",
+      "-Wpedantic",
+      "-fsanitize=address",
+      "-fsanitize=undefined"
     ],
     "directory": "/home/eu/programming/tgo",
-    "output": "/tmp/emscripten_temp_k46xvhsp/main.o"
+    "output": "main"
   }
 ]
