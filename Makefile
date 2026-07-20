@@ -39,11 +39,19 @@ debug: src/main.c
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
 		$(DBG_CFLAGS)
 
+server: src/server.c
+	$(CC) src/rules.c src/stack.c src/server.c -o server \
+		$(DBG_CFLAGS)
+
 run:
 	./main
 
 run_web:
 	python -m http.server 8080
 
+serve:
+	./server
+
 clean:
 	rm main
+	rm server
