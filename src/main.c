@@ -1,8 +1,6 @@
-// TODO
-// - if not moving, show cursor and let click to place stones
-
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #if defined(PLATFORM_WEB)
 #include "./external/raylib/src/raylib.h"
@@ -56,7 +54,11 @@ typedef struct {
   int count;
 
   int camera_mode;
+  Color camera_color;
 } MainLoopArg;
+
+static inline int is_moving(void);
+Color get_rnd_color(void);
 
 void UpdateDrawFrame(void *);
 void control_camera(Camera *, Vector3 *, int *);
@@ -71,6 +73,8 @@ void sort_inters(int, Vector3 **, Vector3);
 void draw_inters(Vector3 *, Vector3 *);
 
 int main() {
+  srand(time(NULL));
+
   InitWindow(W, H, "Toroidal Go");
   DisableCursor();
 
@@ -118,7 +122,9 @@ int main() {
   main_loop_arg->focused_stone = sorted_inters[0];
   main_loop_arg->count_from_closest = 0;
   main_loop_arg->count = 0;
+
   main_loop_arg->camera_mode = CAMERA_FIRST_PERSON;
+  main_loop_arg->camera_color = get_rnd_color();
 
 #if defined(PLATFORM_WEB)
   emscripten_set_main_loop_arg(UpdateDrawFrame, main_loop_arg, 0, 1);
@@ -148,6 +154,86 @@ static inline int is_moving(void) {
   return (IsKeyDown(KEY_W) || IsKeyDown(KEY_S) || IsKeyDown(KEY_A) ||
           IsKeyDown(KEY_D) || IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) ||
           IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT));
+}
+
+Color get_rnd_color(void) {
+  int ci = rand() % 8;
+  switch (ci) {
+  default:
+    return BLACK;
+  case 0:
+    return YELLOW;
+  case 1:
+    return RED;
+  case 2:
+    return PURPLE;
+  case 3:
+    return BLUE;
+  case 4:
+    return GREEN;
+  case 5:
+    return BROWN;
+  case 6:
+    return ORANGE;
+  case 7:
+    return PINK;
+  }
+}
+
+void UpdateDrawFrame(void *arg_) {
+  MainLoopArg *arg = arg_;
+
+  int new_len = N_INTERS - arg->count;
+  if (arg->camera_mode == CAMERA_THIRD_PERSON)
+    sort_inters(new_len, &arg->sorted_inters, arg->camera.target);
+  else
+    sort_inters(new_len, &arg->sorted_inters, arg->camera.position);
+
+  if (IsKeyPressed(KEY_ONE)) {
+    arg->camera_mode = CAMERA_FIRST_PERSON;
+    arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
+  }
+
+  if (IsKeyPressed(KEY_TWO)) {
+    arg->camera_mode = CAMERA_THIRD_PERSON;
+    arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
+  }
+
+  Vector3 mouse_delta;
+  control_camera(&arg->camera, &mouse_delta, &arg->camera_mode);
+
+  place_stone_keyboard(arg);
+  place_stone_mouse(&mouse_delta, arg);
+
+  BeginDrawing();
+  ClearBackground(GRAY);
+
+  BeginMode3D(arg->camera);
+
+  DrawModel(arg->torus, ORIGIN, 1, BEIGE);
+  draw_inters(&arg->focused_stone, arg->intersections);
+
+  for (int i = 0; i < N_INTERS; i++) {
+    if (IS_ZERO(arg->stones[i]))
+      continue;
+
+    if (i % 2 == 0) {
+      DrawModel(arg->black, arg->stones[i], 1, GRAY);
+    } else {
+      DrawModel(arg->white, arg->stones[i], 1, WHITE);
+    }
+  }
+
+  if (arg->camera_mode == CAMERA_THIRD_PERSON) {
+    DrawCube(arg->camera.target, 1.0f, 1.0f, 1.0f, arg->camera_color);
+    DrawCubeWires(arg->camera.target, 1.0f, 1.0f, 1.0f, BLACK);
+  }
+
+  EndMode3D();
+
+  DrawText(TextFormat("%.2f", 1.f / GetFrameTime()), 10, 10, 20, WHITE);
+
+  EndDrawing();
 }
 
 void control_camera(Camera *camera, Vector3 *mouse_delta, int *camera_mode) {
@@ -190,59 +276,6 @@ void control_camera(Camera *camera, Vector3 *mouse_delta, int *camera_mode) {
   }
 
   UpdateCameraPro(camera, movement, rotation, zoom);
-}
-
-void UpdateDrawFrame(void *arg_) {
-  MainLoopArg *arg = arg_;
-
-  int new_len = N_INTERS - arg->count;
-  sort_inters(new_len, &arg->sorted_inters, arg->camera.position);
-
-  if (IsKeyPressed(KEY_ONE)) {
-    arg->camera_mode = CAMERA_FIRST_PERSON;
-    arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
-  }
-
-  if (IsKeyPressed(KEY_TWO)) {
-    arg->camera_mode = CAMERA_THIRD_PERSON;
-    arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
-  }
-
-  Vector3 mouse_delta;
-  control_camera(&arg->camera, &mouse_delta, &arg->camera_mode);
-
-  place_stone_keyboard(arg);
-  place_stone_mouse(&mouse_delta, arg);
-
-  BeginDrawing();
-  ClearBackground(GRAY);
-
-  BeginMode3D(arg->camera);
-
-  DrawModel(arg->torus, ORIGIN, 1, BEIGE);
-  draw_inters(&arg->focused_stone, arg->intersections);
-
-  for (int i = 0; i < N_INTERS; i++) {
-    if (IS_ZERO(arg->stones[i]))
-      continue;
-
-    if (i % 2 == 0) {
-      DrawModel(arg->black, arg->stones[i], 1, GRAY);
-    } else {
-      DrawModel(arg->white, arg->stones[i], 1, WHITE);
-    }
-  }
-
-  if (arg->camera_mode == CAMERA_THIRD_PERSON) {
-    DrawCube(arg->camera.target, 0.5f, 0.5f, 0.5f, PURPLE);
-    DrawCubeWires(arg->camera.target, 0.5f, 0.5f, 0.5f, DARKPURPLE);
-  }
-
-  EndMode3D();
-
-  DrawText(TextFormat("%.2f", 1.f / GetFrameTime()), 10, 10, 20, WHITE);
-
-  EndDrawing();
 }
 
 int get_stone_idx(Vector3 *s, Vector3 *stones) {
