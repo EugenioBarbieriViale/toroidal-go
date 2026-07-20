@@ -2,6 +2,7 @@
 // - nearest intersection must also be in view field
 // - iterate through sorted intersections
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #if defined(PLATFORM_WEB)
@@ -23,11 +24,15 @@
 #define CENTER_RADIUS (SIZE / 2.0f)
 #define TUBE_RADIUS (NORM_RADIUS * SIZE / 2.0f)
 
-#define EPS (10e-3)
+#define REALLOC_THRESHOLD 8
+#define EPS ((float)(10e-3))
 
-#define DIST(v, w) Vector3Length(Vector3Subtract(v, w))
-#define IS_ZERO(v) (Vector3Length(v) < (float)EPS)
-#define IS_EQUALF(a, b) (fabs(a - b) < EPS)
+static inline float dist(Vector3 v, Vector3 w) {
+  return Vector3Length(Vector3Subtract(v, w));
+}
+
+#define IS_ZERO(v) (Vector3Length(v) < EPS)
+#define ARE_EQUAL(v, w) (dist(v, w) < EPS)
 
 #define N_LINES 18
 #define N_INTERS (N_LINES * N_LINES)
@@ -46,17 +51,17 @@ typedef struct {
   Vector3 *intersections;
   Vector3 *sorted_inters;
 
-  int sorted_count;
-  int stone_skips;
+  Vector3 focused_stone;
+  int count_from_sorted;
   int count;
 } MainLoopArg;
 
-void compute_inters(Vector3[]);
-void sort_inters(Vector3[], Vector3);
-void draw_inters(int, Vector3[]);
+void compute_inters(Vector3 *);
+void sort_inters(int, Vector3 **, Vector3);
+void draw_inters(Vector3 *, Vector3 *);
 
-int Vector3cmp(Vector3 *, Vector3 *);
-int get_stone_idx(Vector3 *, Vector3[]);
+int get_stone_idx(Vector3 *, Vector3 *);
+void pop_stone(int, int, Vector3 **);
 
 void place_stone(MainLoopArg *);
 void UpdateDrawFrame(void *);
@@ -92,7 +97,7 @@ int main() {
   Vector3 intersections[N_INTERS];
   compute_inters(intersections);
 
-  Vector3 sorted_inters[N_INTERS];
+  Vector3 *sorted_inters = (Vector3 *)malloc(N_INTERS * sizeof(Vector3));
   compute_inters(sorted_inters);
 
   MainLoopArg *main_loop_arg = (MainLoopArg *)malloc(sizeof(MainLoopArg));
@@ -106,8 +111,8 @@ int main() {
   main_loop_arg->intersections = intersections;
   main_loop_arg->sorted_inters = sorted_inters;
 
-  main_loop_arg->stone_skips = 0;
-  main_loop_arg->sorted_count = 0;
+  main_loop_arg->focused_stone = sorted_inters[0];
+  main_loop_arg->count_from_sorted = 0;
   main_loop_arg->count = 0;
 
 #if defined(PLATFORM_WEB)
@@ -126,7 +131,9 @@ int main() {
 
   UnloadTexture(texture);
 
+  free(main_loop_arg->sorted_inters);
   free(main_loop_arg);
+
   CloseWindow();
 
   return 0;
@@ -157,7 +164,10 @@ void UpdateDrawFrame(void *arg_) {
       },
       GetMouseWheelMove() * 2.0f);
 
-  sort_inters(arg->sorted_inters, arg->camera.position);
+  // count is still not updated here
+  int new_len = N_INTERS - arg->count;
+  sort_inters(new_len, &arg->sorted_inters, arg->camera.position);
+
   place_stone(arg);
 
   BeginDrawing();
@@ -167,7 +177,7 @@ void UpdateDrawFrame(void *arg_) {
 
   DrawModel(arg->torus, ORIGIN, 1, BEIGE);
 
-  draw_inters(arg->sorted_count, arg->sorted_inters);
+  draw_inters(&arg->focused_stone, arg->intersections);
 
   for (int i = 0; i < N_INTERS; i++) {
     if (IS_ZERO(arg->stones[i]))
@@ -184,41 +194,56 @@ void UpdateDrawFrame(void *arg_) {
   EndDrawing();
 }
 
-int Vector3cmp(Vector3 *v, Vector3 *w) {
-  return (IS_EQUALF(v->x, w->x) && IS_EQUALF(v->y, w->y) &&
-          IS_EQUALF(v->z, w->z));
-}
-
-int get_stone_idx(Vector3 *s, Vector3 stones[]) {
+int get_stone_idx(Vector3 *s, Vector3 *stones) {
   for (int i = 0; i < N_INTERS; i++) {
-    if (Vector3cmp(&stones[i], s))
+    if (ARE_EQUAL(stones[i], *s))
       return i;
   }
   return -1;
 }
 
-void place_stone(MainLoopArg *arg) {
-  // check if another stone has already been placed in that position
-  arg->sorted_count = 0;
-  while (get_stone_idx(&arg->sorted_inters[arg->sorted_count], arg->stones) !=
-         -1) {
-    if (arg->sorted_count >= N_INTERS)
-      break;
-    arg->sorted_count++;
-  }
+void pop_stone(int idx, int last_idx, Vector3 **sorted_inters) {
+  if (idx < 0 || idx > last_idx)
+    abort();
 
-  if (IsKeyPressed(KEY_E) && IsKeyDown(KEY_LEFT_SHIFT))
-    arg->sorted_count--;
-  else if (IsKeyPressed(KEY_E))
-    arg->sorted_count++;
+  if (last_idx == 0)
+    return;
 
-  if (IsKeyPressed(KEY_ENTER)) {
-    arg->stones[arg->count++] = arg->sorted_inters[arg->sorted_count];
-    arg->sorted_count = 0;
+  (*sorted_inters)[idx] = (*sorted_inters)[last_idx];
+
+  if ((N_INTERS - last_idx) % REALLOC_THRESHOLD == 0) {
+    Vector3 *tmp_ptr =
+        realloc(*sorted_inters, (last_idx + 1) * sizeof(Vector3));
+    if (tmp_ptr) {
+      printf("REALLOCATING, LENGTH IS NOW %d\n", last_idx + 1);
+      *sorted_inters = tmp_ptr;
+    } else {
+      perror("Error reallocating memory");
+      abort();
+    }
   }
 }
 
-void compute_inters(Vector3 intersections[]) {
+void place_stone(MainLoopArg *arg) {
+  if (IsKeyPressed(KEY_E) && IsKeyDown(KEY_LEFT_SHIFT)) {
+    if (arg->count_from_sorted > 0)
+      arg->count_from_sorted--;
+  } else if (IsKeyPressed(KEY_E) && arg->count_from_sorted < N_INTERS)
+    arg->count_from_sorted++;
+
+  arg->focused_stone = arg->sorted_inters[arg->count_from_sorted];
+
+  if (IsKeyPressed(KEY_ENTER)) {
+    arg->stones[arg->count++] = arg->focused_stone;
+
+    int last_idx = N_INTERS - arg->count - 1;
+    pop_stone(arg->count_from_sorted, last_idx, &arg->sorted_inters);
+
+    arg->count_from_sorted = 0;
+  }
+}
+
+void compute_inters(Vector3 *intersections) {
   for (int i = 0; i < N_LINES; i++) {
     float theta = (float)i * UNIT_ANGLE;
 
@@ -232,37 +257,37 @@ void compute_inters(Vector3 intersections[]) {
   }
 }
 
-void sort_inters(Vector3 intersections[], Vector3 cam_pos) {
-  float distances[N_INTERS];
-  for (int i = 0; i < N_INTERS; i++) {
-    distances[i] = DIST(cam_pos, intersections[i]);
+void sort_inters(int new_len, Vector3 **to_sort_inters, Vector3 cam_pos) {
+  float distances[new_len];
+  for (int i = 0; i < new_len; i++) {
+    distances[i] = dist(cam_pos, (*to_sort_inters)[i]);
   }
 
-  for (int i = 1; i < N_INTERS; i++) {
-    Vector3 key_vec = intersections[i];
+  for (int i = 1; i < new_len; i++) {
+    Vector3 key_vec = (*to_sort_inters)[i];
     float key_dst = distances[i];
     int j = i - 1;
 
     while (j >= 0 && distances[j] > key_dst) {
-      intersections[j + 1] = intersections[j];
+      (*to_sort_inters)[j + 1] = (*to_sort_inters)[j];
       distances[j + 1] = distances[j];
       j--;
     }
 
-    intersections[j + 1] = key_vec;
+    (*to_sort_inters)[j + 1] = key_vec;
     distances[j + 1] = key_dst;
   }
 }
 
-void draw_inters(int sorted_count, Vector3 sorted_inters[]) {
+void draw_inters(Vector3 *focused_stone, Vector3 *intersections) {
   for (int i = 0; i < N_INTERS; i++) {
-    Vector3 v = sorted_inters[i];
+    Vector3 v = intersections[i];
 
     if (IS_ZERO(v))
       continue;
 
     Color color = RED;
-    if (i == sorted_count)
+    if (ARE_EQUAL(v, *focused_stone))
       color = GREEN;
 
     DrawCubeV(v, (Vector3){0.2f, 0.2f, 0.2f}, color);
