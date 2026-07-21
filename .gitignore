@@ -3,6 +3,7 @@ external/emsdk/
 main
 rules
 server
+client
 
 main.html
 main.js

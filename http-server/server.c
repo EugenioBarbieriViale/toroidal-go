@@ -21,6 +21,8 @@ static inline void check(int *status, const char *msg) {
   }
 }
 
+void handle_client(int);
+
 int main() {
   int status;
 
@@ -40,40 +42,49 @@ int main() {
   status = listen(s, MAX_CONNECTIONS);
   check(&status, "Failed to listen for connections");
 
-  struct sockaddr_in client_addr;
-  socklen_t client_addr_len = sizeof(client_addr);
+  while (1) {
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
 
-  int client_fd = accept(s, (struct sockaddr *)&client_addr, &client_addr_len);
-  check(&client_fd, "Failed to accept connections");
+    int client_fd =
+        accept(s, (struct sockaddr *)&client_addr, &client_addr_len);
+    check(&client_fd, "Failed to accept connections");
 
-  char buf[2 * INIT_BUF_LEN] = {' '};
-  status = recv(client_fd, buf, 2 * INIT_BUF_LEN, 0);
-  if (status == 0) {
-    perror("Peer closed connection");
-    exit(EXIT_FAILURE);
+    handle_client(client_fd);
+
+    status = close(client_fd);
+    check(&status, "Failed to close client socket");
   }
-  check(&status, "Failed to receive message from socket");
-
-  printf("\n--- BEGIN MSG ---\n");
-  printf("%s\n", buf);
-  printf("--- END MSG  ---\n\n");
-
-  // check if buf is not empty
-  if (1) {
-    char reply[INIT_BUF_LEN] = "HTTP/1.1 200 OK\r\n"
-                               "Server: my-server\r\n"
-                               "Content-type: text/plain\r\n"
-                               "Content-length: 4"
-                               "\r\n"
-                               "OK\r\n";
-    send(client_fd, reply, strlen(reply), 0);
-  }
-
-  status = close(client_fd);
-  check(&status, "Failed to close client socket");
 
   status = close(s);
   check(&status, "Failed to close peer socket");
 
   return 0;
+}
+
+void handle_client(int client_fd) {
+  char buf[2 * INIT_BUF_LEN] = {' '};
+
+  int status;
+  while ((status = recv(client_fd, buf, 2 * INIT_BUF_LEN, 0)) > 0) {
+    printf("\n--- BEGIN MSG ---\n");
+    printf("%s\n", buf);
+    printf("--- END MSG  ---\n\n");
+
+    // check if buf is not empty
+    if (1) {
+      char reply[INIT_BUF_LEN] = "HTTP/1.1 200 OK\r\n"
+                                 "Server: my-server\r\n"
+                                 "Content-type: text/plain\r\n"
+                                 "Content-length: 4\r\n"
+                                 "\r\n"
+                                 "OK\r\n";
+      send(client_fd, reply, strlen(reply), 0);
+    }
+  }
+  if (status == 0) {
+    printf("Client has closed the connection successfully\n");
+    return;
+  }
+  check(&status, "Failed to receive data from client");
 }
