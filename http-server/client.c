@@ -1,9 +1,9 @@
+#include "httplib.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
 
 #define N_LINES 19
@@ -23,42 +23,6 @@ static inline void check(int *status, const char *msg, int include_zero) {
 }
 
 void send_board_to_server(int *, char *, int *);
-
-typedef struct {
-  char *name;
-  char *value;
-} Header;
-
-typedef struct {
-  char *status_line;
-  Header *headers;
-  int n_headers;
-  int content_len;
-  char *content;
-} HttpResponse;
-
-// HttpResponse parse_http(char *str) {
-// void parse_http(char *_str) {
-void parse_http(char *str) {
-  while (1) {
-    char *line_end = strstr(str, "\r\n");
-    if (!line_end)
-      exit(EXIT_FAILURE);
-
-    int len = line_end - str;
-    if (len == 0)
-      break;
-
-    char *line = malloc(len + 1);
-    memcpy(line, str, len);
-
-    line[len] = '\0';
-    printf("%s\n", line);
-    free(line);
-
-    str = line_end + 2;
-  }
-}
 
 int main() {
   int status;
@@ -107,7 +71,30 @@ int main() {
   printf("%s\n", buf);
   printf("--- END SERVER REPLY ---\n\n");
 
-  parse_http(buf);
+  HttpResponse res = parse_http_response(buf);
+
+  printf("%d\n", res.n_headers);
+  printf("%s\n", res.status_line);
+  for (int i = 0; i < res.n_headers; i++) {
+    printf("%s: %s\n", res.headers[i].name, res.headers[i].value);
+  }
+
+  free_response(&res);
+
+  char *post_str = "POST / HTTP/1.1\r\n"
+                   "Host: 127.0.0.1:8080\r\n"
+                   "User-Agent: None\r\n"
+                   "Content-type: text/plain\r\n"
+                   "Content-length: 363\r\n"
+                   "\r\n";
+
+  HttpRequest req = parse_http_request(post_str);
+  printf("%d\n", req.n_headers);
+  for (int i = 0; i < req.n_headers; i++) {
+    printf("%s: %s\n", req.headers[i].name, req.headers[i].value);
+  }
+
+  free_request(&req);
 
   return 0;
 }
@@ -119,6 +106,7 @@ void send_board_to_server(int *server_fd, char *board, int *status) {
   int actual_len = snprintf(send_buf, tot_buf_size,
                             "POST / HTTP/1.1\r\n"
                             "Host: %s:%d\r\n"
+                            "User-Agent: None\r\n"
                             "Content-type: text/plain\r\n"
                             "Content-length: %d\r\n"
                             "\r\n"
