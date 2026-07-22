@@ -15,10 +15,23 @@ HttpResponse parse_http_response(char *str) {
 
   int n_headers = parse_header(&headers, cap, str);
 
+  // do this in parse_headers
+  int content_len = 0;
+  for (int i = 0; i < n_headers; i++) {
+    if (strcmp(headers[i].name, "Content-length") == 0) {
+      content_len = atoi(headers[i].value);
+      break;
+    }
+  }
+
+  char *content = parse_content(str, content_len);
+
   HttpResponse r = {0};
   r.status_line = status_line;
   r.headers = headers;
   r.n_headers = n_headers;
+  r.content_len = content_len;
+  r.content = content;
 
   return r;
 }
@@ -51,10 +64,23 @@ HttpRequest parse_http_request(char *str) {
 
   int n_headers = parse_header(&headers, cap, str);
 
+  // do this in parse_headers
+  int content_len = 0;
+  for (int i = 0; i < n_headers; i++) {
+    if (strcmp(headers[i].name, "Content-length") == 0) {
+      content_len = atoi(headers[i].value);
+      break;
+    }
+  }
+
+  char *content = parse_content(str, content_len);
+
   HttpRequest r = {0};
   r.request_line = rl;
   r.headers = headers;
   r.n_headers = n_headers;
+  r.content_len = content_len;
+  r.content = content;
 
   return r;
 }
@@ -107,6 +133,28 @@ RequestLine parse_request_line(char **str) {
   rl.version = version;
 
   return rl;
+}
+
+char *parse_content(char *str, int content_len) {
+  char *header_end = strstr(str, "\r\n\r\n");
+  if (!header_end)
+    exit(EXIT_FAILURE);
+  int header_len = header_end - str;
+
+  int diff = strlen(str) - header_len - 4;
+  if (diff != content_len) {
+    printf("Invalid content length: expected %d but found %d\n", diff,
+           content_len);
+    exit(EXIT_FAILURE);
+  }
+
+  str = header_end + 4;
+
+  char *content = malloc(content_len + 1);
+  memcpy(content, str, content_len);
+  content[content_len] = '\0';
+
+  return content;
 }
 
 int parse_header(Header **headers, int cap, char *str) {
@@ -171,12 +219,14 @@ int parse_header(Header **headers, int cap, char *str) {
 void free_response(HttpResponse *res) {
   free(res->status_line);
   free_header(res->headers, res->n_headers);
+  free(res->content);
 }
 
 void free_request(HttpRequest *req) {
   free(req->request_line.path);
   free(req->request_line.version);
   free_header(req->headers, req->n_headers);
+  free(req->content);
 }
 
 void free_header(Header *headers, int n_headers) {

@@ -78,6 +78,7 @@ int main() {
   for (int i = 0; i < res.n_headers; i++) {
     printf("%s: %s\n", res.headers[i].name, res.headers[i].value);
   }
+  printf("%s\n", res.content);
 
   free_response(&res);
 
@@ -86,13 +87,15 @@ int main() {
                    "User-Agent: None\r\n"
                    "Content-type: text/plain\r\n"
                    "Content-length: 363\r\n"
-                   "\r\n";
+                   "\r\n"
+                   ".........";
 
   HttpRequest req = parse_http_request(post_str);
   printf("%d\n", req.n_headers);
   for (int i = 0; i < req.n_headers; i++) {
     printf("%s: %s\n", req.headers[i].name, req.headers[i].value);
   }
+  printf("%s\n", req.content);
 
   free_request(&req);
 

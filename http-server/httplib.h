@@ -40,6 +40,7 @@ char *parse_status_line(char **);
 HttpRequest parse_http_request(char *);
 RequestLine parse_request_line(char **);
 
+char *parse_content(char *, int);
 int parse_header(Header **, int, char *);
 
 void free_response(HttpResponse *);
