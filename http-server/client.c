@@ -13,6 +13,7 @@
 #define SERVER_IP "127.0.0.1"
 const int PORT = 8080;
 
+// accept bool as condition, then message
 static inline void check(int *status, const char *msg, int include_zero) {
   int condition = include_zero ? (*status <= 0) : (*status < 0);
   if (condition) {
@@ -22,7 +23,8 @@ static inline void check(int *status, const char *msg, int include_zero) {
   }
 }
 
-void send_board_to_server(int *, char *, int *);
+int send_greetings(int);
+void send_board_to_server(int, char *, int *);
 
 int main() {
   int status;
@@ -42,14 +44,17 @@ int main() {
   status = connect(s, (struct sockaddr *)&server_addr, sizeof(server_addr));
   check(&status, "Failed to connect", 0);
 
-  char board[BOARD_SIZE + 2];
-  board[0] = 'N';
-  board[1] = '-';
-  for (int i = 2; i < BOARD_SIZE; i++)
-    board[i] = '.';
+  status = send_greetings(s);
+  check(&status, "Failed to send greetings", 0);
 
-  send_board_to_server(&s, board, &status);
-  check(&status, "Failed to send message to socket", 0);
+  // char board[BOARD_SIZE + 2];
+  // board[0] = 'N';
+  // board[1] = '-';
+  // for (int i = 2; i < BOARD_SIZE; i++)
+  //   board[i] = '.';
+  //
+  // send_board_to_server(s, board, &status);
+  // check(&status, "Failed to send message to socket", 0);
 
   char buf[INIT_BUF_LEN] = {' '};
   int n = recv(s, buf, INIT_BUF_LEN, 0);
@@ -59,50 +64,29 @@ int main() {
   printf("%s\n", buf);
   printf("--- END SERVER REPLY ---\n\n");
 
-  board[0] = '5';
-  board[5] = 'O';
-  send_board_to_server(&s, board, &status);
-  check(&status, "Failed to send message to socket", 0);
-
-  int new_n = recv(s, buf, INIT_BUF_LEN, 0);
-  check(&new_n, "Failed to get reply from server", 1);
-
-  printf("\n--- BEGIN SERVER REPLY ---\n");
-  printf("%s\n", buf);
-  printf("--- END SERVER REPLY ---\n\n");
-
-  HttpResponse res = parse_http_response(buf);
-
-  printf("%d\n", res.n_headers);
-  printf("%s\n", res.status_line);
-  for (int i = 0; i < res.n_headers; i++) {
-    printf("%s: %s\n", res.headers[i].name, res.headers[i].value);
-  }
-  printf("%s\n", res.content);
-
-  free_response(&res);
-
-  char *post_str = "POST / HTTP/1.1\r\n"
-                   "Host: 127.0.0.1:8080\r\n"
-                   "User-Agent: None\r\n"
-                   "Content-type: text/plain\r\n"
-                   "Content-length: 363\r\n"
-                   "\r\n"
-                   ".........";
-
-  HttpRequest req = parse_http_request(post_str);
-  printf("%d\n", req.n_headers);
-  for (int i = 0; i < req.n_headers; i++) {
-    printf("%s: %s\n", req.headers[i].name, req.headers[i].value);
-  }
-  printf("%s\n", req.content);
-
-  free_request(&req);
-
   return 0;
 }
 
-void send_board_to_server(int *server_fd, char *board, int *status) {
+int send_greetings(int server_fd) {
+  char send_buf[INIT_BUF_LEN];
+
+  int actual_len = snprintf(send_buf, INIT_BUF_LEN,
+                            "GET / HTTP/1.1\r\n"
+                            "Host: %s:%d\r\n"
+                            "User-Agent: None\r\n"
+                            "Content-type: text/plain\r\n"
+                            "Content-length: 2\r\n"
+                            "\r\n"
+                            "*!\r\n",
+                            SERVER_IP, PORT
+
+  );
+
+  int status = send(server_fd, send_buf, actual_len, 0);
+  return status;
+}
+
+void send_board_to_server(int server_fd, char *board, int *status) {
   int tot_buf_size = 2 * INIT_BUF_LEN;
   char send_buf[tot_buf_size];
 
@@ -121,5 +105,5 @@ void send_board_to_server(int *server_fd, char *board, int *status) {
   printf("Length of sent data (including header): %d\n", actual_len);
   printf("%s\n", board);
 
-  *status = send(*server_fd, send_buf, actual_len, 0);
+  *status = send(server_fd, send_buf, actual_len, 0);
 }

@@ -1,6 +1,8 @@
 #ifndef HTTPLIB_H
 #define HTTPLIB_H
 
+#define MAX_CONTENT_LEN 1024
+
 typedef struct {
   char *name;
   char *value;

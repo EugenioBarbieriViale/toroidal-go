@@ -141,7 +141,7 @@ char *parse_content(char *str, int content_len) {
     exit(EXIT_FAILURE);
   int header_len = header_end - str;
 
-  int diff = strlen(str) - header_len - 4;
+  int diff = strlen(str) - header_len - 6;
   if (diff != content_len) {
     printf("Invalid content length: expected %d but found %d\n", diff,
            content_len);
@@ -150,9 +150,17 @@ char *parse_content(char *str, int content_len) {
 
   str = header_end + 4;
 
+  if (content_len < 0 || content_len > MAX_CONTENT_LEN)
+    return "";
+
   char *content = malloc(content_len + 1);
   memcpy(content, str, content_len);
   content[content_len] = '\0';
+
+  // while (content_len > 0 && (content[content_len - 1] == '\n' ||
+  //                            content[content_len - 1] == '\r')) {
+  //   content[--content_len] = '\0';
+  // }
 
   return content;
 }
