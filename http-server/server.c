@@ -1,5 +1,9 @@
+// board format:
+// BN-board
+
+#include "../src/rules.h"
 #include "httplib.h"
-// #include <asm-generic/socket.h>
+
 #include <errno.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -12,6 +16,8 @@
 
 #define N_LINES 19
 #define BOARD_SIZE ((N_LINES) * (N_LINES))
+#define BOARD_MSG_LEN (BOARD_SIZE + 3)
+
 #define INIT_BUF_LEN 256
 
 const int MAX_CONNECTIONS = 10;
@@ -25,11 +31,41 @@ static inline void check(int *status, const char *msg) {
   }
 }
 
+typedef struct {
+  int fc;
+  int color;
+
+  int *board;
+  Stack *reached;
+  Stack *chain;
+
+  int all_neighbors[][4];
+} BoardState;
+
+BoardState init_bs(void) {
+  BoardState bs;
+  bs.fc = -1;
+  bs.color = UNDEF;
+
+  for (int i = 0; i < BOARD_SIZE; i++) {
+    bs.board[i] = EMPTY;
+    get_neighbors(i, bs.all_neighbors[i]);
+  }
+
+  construct(bs.reached);
+  construct(bs.chain);
+
+  return bs;
+}
+
 int create_client(int);
-void decide_colors(int, int);
-int handle_client(int);
+void decide_colors(int, int, int *, int *);
+int parse_board_msg(char *, BoardState *);
+void handle_player(int, int, int *, BoardState *);
 
 int main() {
+  BoardState bs = init_bs();
+
   srand(time(NULL));
   int status;
 
@@ -56,6 +92,8 @@ int main() {
   int fd_a = create_client(s);
   int fd_b = create_client(s);
 
+  int color_a = UNDEF, color_b = UNDEF;
+
   fd_set readfs;
 
   int a_requested = 0, b_requested = 0;
@@ -76,25 +114,15 @@ int main() {
     }
 
     if (FD_ISSET(fd_a, &readfs)) {
-      char buf[INIT_BUF_LEN];
-      int n = recv(fd_a, buf, INIT_BUF_LEN, 0);
-      HttpRequest req = parse_http_request(buf);
-      if (strcmp(req.content, "*!") == 0 && n > 0) {
-        a_requested = 1;
-      }
+      handle_player(fd_a, color_a, &a_requested, &bs);
     }
 
     if (FD_ISSET(fd_b, &readfs)) {
-      char buf[INIT_BUF_LEN];
-      int n = recv(fd_b, buf, INIT_BUF_LEN, 0);
-      HttpRequest req = parse_http_request(buf);
-      if (strcmp(req.content, "*!") == 0 && n > 0) {
-        b_requested = 1;
-      }
+      handle_player(fd_b, color_b, &b_requested, &bs);
     }
 
     if (a_requested && b_requested) {
-      decide_colors(fd_a, fd_b);
+      decide_colors(fd_a, fd_b, &color_a, &color_b);
       a_requested = b_requested = 0;
     }
   }
@@ -121,10 +149,10 @@ int create_client(int s) {
   return client_fd;
 }
 
-void decide_colors(int fd_a, int fd_b) {
+void decide_colors(int fd_a, int fd_b, int *color_a, int *color_b) {
   int r = rand() % 2;
-  char color_a = (r) ? 'O' : 'X';
-  char color_b = (r) ? 'X' : 'O';
+  *color_a = (r) ? BLACK : BLACK;
+  *color_b = (r) ? WHITE : WHITE;
 
   char buf_a[INIT_BUF_LEN];
   int len_a = snprintf(buf_a, INIT_BUF_LEN,
@@ -134,7 +162,7 @@ void decide_colors(int fd_a, int fd_b) {
                        "Content-length: 1\r\n"
                        "\r\n"
                        "%c\r\n",
-                       color_a);
+                       *color_a);
 
   char buf_b[INIT_BUF_LEN];
   int len_b = snprintf(buf_b, INIT_BUF_LEN,
@@ -144,7 +172,7 @@ void decide_colors(int fd_a, int fd_b) {
                        "Content-length: 1\r\n"
                        "\r\n"
                        "%c\r\n",
-                       color_b);
+                       *color_b);
 
   int status = send(fd_a, buf_a, len_a, 0);
   check(&status, "Failed to send color to player A");
@@ -153,26 +181,110 @@ void decide_colors(int fd_a, int fd_b) {
   check(&status, "Failed to send color to player B");
 }
 
-int handle_client(int client_fd) {
-  char buf[2 * INIT_BUF_LEN] = {' '};
+static inline int is_digit(char c) { return (c >= '0' && c <= '9'); }
+static inline int char_to_int(char c) { return (c - '0'); }
 
-  int status;
-  while ((status = recv(client_fd, buf, 2 * INIT_BUF_LEN, 0)) > 0) {
-    printf("\n--- BEGIN MSG ---\n");
-    printf("%s\n", buf);
-    printf("--- END MSG  ---\n\n");
+int parse_board_msg(char *board_msg, BoardState *bs) {
+  int count = 0;
+  if (board_msg[count++] != 'B')
+    return 1;
 
-    // check if buf is not empty
-    if (1) {
-      char reply[INIT_BUF_LEN] = "HTTP/1.1 200 OK\r\n"
-                                 "Server: my-server\r\n"
-                                 "Content-type: text/plain\r\n"
-                                 "Content-length: 4\r\n"
-                                 "\r\n"
-                                 "OK\r\n";
-      send(client_fd, reply, strlen(reply), 0);
-    }
+  char *nu_end = memchr(board_msg, '-', count + 4);
+  if (!nu_end) {
+    printf("Invalid number, more than 3 digits\n");
+    exit(EXIT_FAILURE);
   }
 
-  return status;
+  int len = nu_end - board_msg;
+
+  char *nu_str = malloc(len + 1);
+  memcpy(nu_str, board_msg + count, len);
+  nu_str[len] = '\0';
+
+  int fc = atoi(nu_str);
+  free(nu_str);
+
+  if (fc < 0)
+    return 1;
+
+  if (board_msg[len] != '-')
+    return 1;
+
+  board_msg = nu_end + 1;
+
+  if (strlen(board_msg) != BOARD_SIZE)
+    return 1;
+
+  bs->fc = fc;
+
+  for (int i = 0; i < BOARD_SIZE; i++) {
+    int _fc = char_to_int(board_msg[i]);
+    if (_fc != EMPTY && _fc != BLACK && _fc != WHITE)
+      return 1;
+
+    bs->board[i] = _fc;
+  }
+
+  return 0;
+}
+
+void handle_player(int fd, int color, int *request, BoardState *bs) {
+  char buf[INIT_BUF_LEN * 2];
+
+  int n = recv(fd, buf, INIT_BUF_LEN * 2, 0);
+  HttpRequest req = parse_http_request(buf);
+
+  if (n == 0) {
+    printf("Player has closed the connection successfully\n");
+    return;
+  } else if (n > 0) {
+    if (strcmp(req.content, "*!") == 0) {
+      *request = 1;
+      return;
+    }
+
+    if (parse_board_msg(req.content, bs) == 1) {
+      char err_buf[INIT_BUF_LEN];
+      int len = snprintf(err_buf, INIT_BUF_LEN,
+                         "HTTP/1.1 400 Bad Request\r\n"
+                         "Server: my-server\r\n"
+                         "Content-type: text/plain\r\n"
+                         "Content-length: 1\r\n"
+                         "\r\n"
+                         "?\r\n");
+      int status = send(fd, err_buf, len, 0);
+      check(&status, "Failed to send error msg to player");
+      return;
+    }
+
+    // check rules, send YES / NO
+    char move_msg_buf[INIT_BUF_LEN];
+    int buf_len = INIT_BUF_LEN;
+    int return_code = move(bs->fc, color, bs->board, bs->all_neighbors,
+                           bs->reached, bs->chain, move_msg_buf, &buf_len);
+
+    if (return_code != 0) {
+      char err_buf[INIT_BUF_LEN];
+      int len = snprintf(err_buf, INIT_BUF_LEN,
+                         "HTTP/1.1 400 Bad Request\r\n"
+                         "Server: my-server\r\n"
+                         "Content-type: text/plain\r\n"
+                         "Content-length: %d\r\n"
+                         "\r\n"
+                         "%s\r\n",
+                         buf_len, move_msg_buf);
+      int status = send(fd, err_buf, len, 0);
+      check(&status, "Failed to send error msg to player");
+    } else {
+      char buf[INIT_BUF_LEN];
+      int len = snprintf(buf, INIT_BUF_LEN,
+                         "HTTP/1.1 200 OK\r\n"
+                         "Server: my-server\r\n"
+                         "Content-type: text/plain\r\n"
+                         "Content-length: %d\r\n"
+                         "\r\n"
+                         "%s\r\n",
+                         buf_len, move_msg_buf);
+    }
+  }
 }

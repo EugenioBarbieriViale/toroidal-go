@@ -4,6 +4,23 @@
 
 int ko_point = -1;
 
+static int get_idx(int, int, int *);
+static void flood_fill(int, int *, const int[][4], Stack *, Stack *);
+
+static int unsigned get_liberties(int, int *, const int[][4], Stack *, Stack *);
+static int maybe_capture(unsigned int, int *, Stack *);
+
+static inline int flatten(Coord2 c) { return N_LINES * c.row + c.col; }
+
+static inline Coord2 unflatten(int fc) {
+  return (Coord2){fc / N_LINES, fc % N_LINES};
+}
+
+static inline void clone_arr(int from[], int to[], int len) {
+  for (int i = 0; i < len; i++)
+    to[i] = from[i];
+}
+
 void get_neighbors(int fc, int out[]) {
   Coord2 c = unflatten(fc);
 
@@ -19,7 +36,7 @@ void get_neighbors(int fc, int out[]) {
   }
 }
 
-int get_idx(int elem, int len, int arr[]) {
+static int get_idx(int elem, int len, int arr[]) {
   for (int i = 0; i < len; i++) {
     if (elem == arr[i])
       return i;
@@ -27,8 +44,8 @@ int get_idx(int elem, int len, int arr[]) {
   return -1;
 }
 
-void flood_fill(int fc, int board[], int all_neighbors[][4], Stack *reached,
-                Stack *chain) {
+static void flood_fill(int fc, int board[], const int all_neighbors[][4],
+                       Stack *reached, Stack *chain) {
   int color = board[fc];
 
   Stack frontier;
@@ -58,8 +75,9 @@ void flood_fill(int fc, int board[], int all_neighbors[][4], Stack *reached,
   free(frontier.buffer);
 }
 
-int unsigned get_liberties(int fc, int board[], int all_neighbors[][4],
-                           Stack *reached, Stack *chain) {
+static int unsigned get_liberties(int fc, int board[],
+                                  const int all_neighbors[][4], Stack *reached,
+                                  Stack *chain) {
   reached->top = -1;
   chain->top = -1;
   flood_fill(fc, board, all_neighbors, reached, chain);
@@ -74,7 +92,7 @@ int unsigned get_liberties(int fc, int board[], int all_neighbors[][4],
   return liberties;
 }
 
-int maybe_capture(unsigned int libs, int board[], Stack *chain) {
+static int maybe_capture(unsigned int libs, int board[], Stack *chain) {
   if (libs == 0) {
     for (int i = 0; i <= chain->top; i++) {
       int fc = chain->buffer[i];
@@ -85,18 +103,24 @@ int maybe_capture(unsigned int libs, int board[], Stack *chain) {
   return 0;
 }
 
-void move(Coord2 c, int board[], int all_neighbors[][4], Stack *reached,
-          Stack *chain, int color) {
-  int fc = flatten(c);
+int move(int fc, const int color, int *board, const int all_neighbors[][4],
+         Stack *reached, Stack *chain, char *return_buf, int *buf_len) {
+
+  Coord2 c = unflatten(fc);
 
   if (board[fc] != EMPTY) {
-    printf("ILLEGAL MOVE: (%d, %d) already occupied\n", c.row, c.col);
-    return;
+    *buf_len =
+        snprintf(return_buf, *buf_len,
+                 "ILLEGAL MOVE: (%d, %d) already occupied", c.row, c.col);
+    // printf("ILLEGAL MOVE: (%d, %d) already occupied\n", c.row, c.col);
+    return 1;
   }
 
   if (fc == ko_point) {
-    printf("ILLEGAL MOVE: ko violation at (%d, %d)\n", c.row, c.col);
-    return;
+    *buf_len = snprintf(return_buf, *buf_len,
+                        "ILLEGAL MOVE: ko violation at (%d, %d)", c.row, c.col);
+    // printf("ILLEGAL MOVE: ko violation at (%d, %d)\n", c.row, c.col);
+    return 1;
   }
 
   ko_point = -1;
@@ -137,9 +161,11 @@ void move(Coord2 c, int board[], int all_neighbors[][4], Stack *reached,
 
   if (fc_libs == 0) {
     board[fc] = EMPTY;
-    printf("ILLEGAL MOVE: suicide at (%d, %d)\n", c.row, c.col);
+    *buf_len = snprintf(return_buf, *buf_len,
+                        "ILLEGAL MOVE: suicide at (%d, %d)", c.row, c.col);
+    // printf("ILLEGAL MOVE: suicide at (%d, %d)\n", c.row, c.col);
     free(opp_stones.buffer);
-    return;
+    return 1;
   }
 
   int fc_group_size = chain->top + 1;
@@ -149,9 +175,13 @@ void move(Coord2 c, int board[], int all_neighbors[][4], Stack *reached,
     ko_point = -1;
 
   free(opp_stones.buffer);
+
+  *buf_len = snprintf(return_buf, *buf_len,
+                      "Successfully placed stone at (%d, %d)", c.row, c.col);
+  return 0;
 }
 
-void score(int board[], int all_neighbors[][4], int *black_score,
+void score(int board[], const int all_neighbors[][4], int *black_score,
            int *white_score) {
   int score_board[N_INTERS];
   clone_arr(board, score_board, N_INTERS);
@@ -200,7 +230,7 @@ void score(int board[], int all_neighbors[][4], int *black_score,
     } else {
       for (int i = 0; i <= empties.top; i++) {
         int fb = empties.buffer[i];
-        score_board[fb] = '?';
+        score_board[fb] = UNDEF;
       }
     }
   }

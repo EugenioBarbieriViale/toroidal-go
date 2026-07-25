@@ -5,7 +5,7 @@ client:
 	./client
 
 server:
-	gcc -o server server.c httplib.c $(CFLAGS)
+	gcc -o server server.c httplib.c ../src/rules.c ../src/stack.c $(CFLAGS)
 	./server
 
 clean:

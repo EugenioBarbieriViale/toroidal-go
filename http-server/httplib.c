@@ -136,6 +136,9 @@ RequestLine parse_request_line(char **str) {
 }
 
 char *parse_content(char *str, int content_len) {
+  if (content_len < 0 || content_len > MAX_CONTENT_LEN)
+    return "";
+
   char *header_end = strstr(str, "\r\n\r\n");
   if (!header_end)
     exit(EXIT_FAILURE);
@@ -150,17 +153,9 @@ char *parse_content(char *str, int content_len) {
 
   str = header_end + 4;
 
-  if (content_len < 0 || content_len > MAX_CONTENT_LEN)
-    return "";
-
   char *content = malloc(content_len + 1);
   memcpy(content, str, content_len);
   content[content_len] = '\0';
-
-  // while (content_len > 0 && (content[content_len - 1] == '\n' ||
-  //                            content[content_len - 1] == '\r')) {
-  //   content[--content_len] = '\0';
-  // }
 
   return content;
 }
