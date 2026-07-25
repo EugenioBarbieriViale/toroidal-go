@@ -136,8 +136,10 @@ RequestLine parse_request_line(char **str) {
 }
 
 char *parse_content(char *str, int content_len) {
-  if (content_len < 0 || content_len > MAX_CONTENT_LEN)
-    return "";
+  if (content_len < 0 || content_len > MAX_CONTENT_LEN) {
+    printf("Content length is either negative or too big\n");
+    exit(EXIT_FAILURE);
+  }
 
   char *header_end = strstr(str, "\r\n\r\n");
   if (!header_end)

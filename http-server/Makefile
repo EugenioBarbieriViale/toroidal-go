@@ -2,11 +2,9 @@ CFLAGS = -g -Os -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno
 
 client:
 	gcc -o client client.c httplib.c $(CFLAGS)
-	./client
 
 server:
 	gcc -o server server.c httplib.c ../src/rules.c ../src/stack.c $(CFLAGS)
-	./server
 
 clean:
 	rm client

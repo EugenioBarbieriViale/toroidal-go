@@ -35,27 +35,24 @@ typedef struct {
   int fc;
   int color;
 
-  int *board;
-  Stack *reached;
-  Stack *chain;
+  int board[BOARD_SIZE];
+  int all_neighbors[BOARD_SIZE][4];
 
-  int all_neighbors[][4];
+  Stack reached;
+  Stack chain;
 } BoardState;
 
-BoardState init_bs(void) {
-  BoardState bs;
-  bs.fc = -1;
-  bs.color = UNDEF;
+void init_bs(BoardState *bs) {
+  bs->fc = -1;
+  bs->color = UNDEF;
 
   for (int i = 0; i < BOARD_SIZE; i++) {
-    bs.board[i] = EMPTY;
-    get_neighbors(i, bs.all_neighbors[i]);
+    bs->board[i] = EMPTY;
+    get_neighbors(i, bs->all_neighbors[i]);
   }
 
-  construct(bs.reached);
-  construct(bs.chain);
-
-  return bs;
+  construct(&bs->reached);
+  construct(&bs->chain);
 }
 
 int create_client(int);
@@ -64,7 +61,8 @@ int parse_board_msg(char *, BoardState *);
 void handle_player(int, int, int *, BoardState *);
 
 int main() {
-  BoardState bs = init_bs();
+  BoardState *bs = malloc(sizeof(BoardState));
+  init_bs(bs);
 
   srand(time(NULL));
   int status;
@@ -114,11 +112,11 @@ int main() {
     }
 
     if (FD_ISSET(fd_a, &readfs)) {
-      handle_player(fd_a, color_a, &a_requested, &bs);
+      handle_player(fd_a, color_a, &a_requested, bs);
     }
 
     if (FD_ISSET(fd_b, &readfs)) {
-      handle_player(fd_b, color_b, &b_requested, &bs);
+      handle_player(fd_b, color_b, &b_requested, bs);
     }
 
     if (a_requested && b_requested) {
@@ -136,6 +134,7 @@ int main() {
   status = close(s);
   check(&status, "Failed to close peer socket");
 
+  free(bs);
   return 0;
 }
 
@@ -161,7 +160,7 @@ void decide_colors(int fd_a, int fd_b, int *color_a, int *color_b) {
                        "Content-type: text/plain\r\n"
                        "Content-length: 1\r\n"
                        "\r\n"
-                       "%c\r\n",
+                       "%d\r\n",
                        *color_a);
 
   char buf_b[INIT_BUF_LEN];
@@ -171,7 +170,7 @@ void decide_colors(int fd_a, int fd_b, int *color_a, int *color_b) {
                        "Content-type: text/plain\r\n"
                        "Content-length: 1\r\n"
                        "\r\n"
-                       "%c\r\n",
+                       "%d\r\n",
                        *color_b);
 
   int status = send(fd_a, buf_a, len_a, 0);
@@ -186,8 +185,11 @@ static inline int char_to_int(char c) { return (c - '0'); }
 
 int parse_board_msg(char *board_msg, BoardState *bs) {
   int count = 0;
-  if (board_msg[count++] != 'B')
+  if (board_msg[count++] != 'B') {
+    printf(
+        "Content not starting with correct identifier for board functions\n");
     return 1;
+  }
 
   char *nu_end = memchr(board_msg, '-', count + 4);
   if (!nu_end) {
@@ -204,25 +206,36 @@ int parse_board_msg(char *board_msg, BoardState *bs) {
   int fc = atoi(nu_str);
   free(nu_str);
 
-  if (fc < 0)
+  if (fc < 0 || fc > BOARD_SIZE) {
+    printf("Given coordinate is out of bounds: %d\n", fc);
     return 1;
+  }
 
-  if (board_msg[len] != '-')
+  if (board_msg[len] != '-') {
+    printf("Board message is misformatted and does not contain a dash (-)\n");
     return 1;
+  }
 
   board_msg = nu_end + 1;
 
-  if (strlen(board_msg) != BOARD_SIZE)
+  int given_board_size = strlen(board_msg);
+  if (given_board_size != BOARD_SIZE) {
+    printf(
+        "The sent board is of length %d but was expected to have length %d\n",
+        given_board_size, BOARD_SIZE);
     return 1;
+  }
 
   bs->fc = fc;
 
   for (int i = 0; i < BOARD_SIZE; i++) {
-    int _fc = char_to_int(board_msg[i]);
-    if (_fc != EMPTY && _fc != BLACK && _fc != WHITE)
+    int maybe_stone = char_to_int(board_msg[i]);
+    if (maybe_stone != EMPTY && maybe_stone != BLACK && maybe_stone != WHITE) {
+      printf("Unidentified object at index %d: %d\n", i, maybe_stone);
       return 1;
+    }
 
-    bs->board[i] = _fc;
+    bs->board[i] = maybe_stone;
   }
 
   return 0;
@@ -232,14 +245,18 @@ void handle_player(int fd, int color, int *request, BoardState *bs) {
   char buf[INIT_BUF_LEN * 2];
 
   int n = recv(fd, buf, INIT_BUF_LEN * 2, 0);
+  printf("%s\n", buf);
+
   HttpRequest req = parse_http_request(buf);
 
   if (n == 0) {
     printf("Player has closed the connection successfully\n");
+    free_request(&req);
     return;
   } else if (n > 0) {
     if (strcmp(req.content, "*!") == 0) {
       *request = 1;
+      free_request(&req);
       return;
     }
 
@@ -254,6 +271,7 @@ void handle_player(int fd, int color, int *request, BoardState *bs) {
                          "?\r\n");
       int status = send(fd, err_buf, len, 0);
       check(&status, "Failed to send error msg to player");
+      free_request(&req);
       return;
     }
 
@@ -261,7 +279,7 @@ void handle_player(int fd, int color, int *request, BoardState *bs) {
     char move_msg_buf[INIT_BUF_LEN];
     int buf_len = INIT_BUF_LEN;
     int return_code = move(bs->fc, color, bs->board, bs->all_neighbors,
-                           bs->reached, bs->chain, move_msg_buf, &buf_len);
+                           &bs->reached, &bs->chain, move_msg_buf, &buf_len);
 
     if (return_code != 0) {
       char err_buf[INIT_BUF_LEN];
@@ -276,15 +294,28 @@ void handle_player(int fd, int color, int *request, BoardState *bs) {
       int status = send(fd, err_buf, len, 0);
       check(&status, "Failed to send error msg to player");
     } else {
-      char buf[INIT_BUF_LEN];
-      int len = snprintf(buf, INIT_BUF_LEN,
+      printf("%s\n", move_msg_buf);
+
+      char board_str[BOARD_SIZE + 1];
+      for (int i = 0; i < BOARD_SIZE; i++) {
+        board_str[i] = bs->board[i] + '0';
+      }
+      board_str[BOARD_SIZE] = '\0';
+
+      char buf[INIT_BUF_LEN * 2];
+      int len = snprintf(buf, INIT_BUF_LEN * 2,
                          "HTTP/1.1 200 OK\r\n"
                          "Server: my-server\r\n"
                          "Content-type: text/plain\r\n"
                          "Content-length: %d\r\n"
                          "\r\n"
                          "%s\r\n",
-                         buf_len, move_msg_buf);
+                         buf_len, board_str);
+
+      int status = send(fd, buf, len, 0);
+      check(&status, "Failed to send board to player");
     }
   }
+
+  free_request(&req);
 }

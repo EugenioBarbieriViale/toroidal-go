@@ -1,4 +1,6 @@
+#include "../src/rules.h"
 #include "httplib.h"
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
@@ -9,9 +11,8 @@
 
 #define N_LINES 19
 #define BOARD_SIZE ((N_LINES) * (N_LINES))
-#define BLACK 'O'
-#define WHITE 'X'
 
+#define BOARD_MSG_LEN (BOARD_SIZE + 3)
 #define INIT_BUF_LEN 256
 
 #define SERVER_IP "127.0.0.1"
@@ -28,7 +29,7 @@ static inline void check(int *status, const char *msg, int include_zero) {
 }
 
 int send_greetings(int);
-char get_color(int);
+int get_color(int);
 void send_board_to_server(int, char *, int *);
 
 int main() {
@@ -53,15 +54,22 @@ int main() {
   check(&status, "Failed to send greetings", 0);
 
   const int color = get_color(s);
+  printf("MY COLOR: %d\n", color);
 
-  // char board[BOARD_SIZE + 2];
-  // board[0] = 'N';
-  // board[1] = '-';
-  // for (int i = 2; i < BOARD_SIZE; i++)
-  //   board[i] = '.';
-  //
-  // send_board_to_server(s, board, &status);
-  // check(&status, "Failed to send message to socket", 0);
+  if (color == BLACK) {
+    char board[BOARD_SIZE + 1];
+    for (int i = 0; i < BOARD_SIZE; i++)
+      board[i] = EMPTY + '0';
+    board[BOARD_SIZE] = '\0';
+
+    send_board_to_server(s, board, &status);
+    check(&status, "Failed to send message to socket", 0);
+
+    char buf[INIT_BUF_LEN * 2];
+    int n = recv(s, buf, INIT_BUF_LEN * 2, 0);
+    check(&n, "Failed to get board from server", 0);
+    printf("%s\n", buf);
+  }
 
   return 0;
 }
@@ -85,17 +93,22 @@ int send_greetings(int server_fd) {
   return status;
 }
 
-char get_color(int server_fd) {
+int get_color(int server_fd) {
   char buf[INIT_BUF_LEN] = {' '};
   int n = recv(server_fd, buf, INIT_BUF_LEN, 0);
   check(&n, "Failed to get color from server", 0);
+
   HttpResponse res = parse_http_response(buf);
   if (strlen(res.content) != 1 && res.content[0] != BLACK &&
       res.content[0] != WHITE) {
     printf("Not a valid color\n");
     exit(EXIT_FAILURE);
   }
-  return res.content[0];
+
+  int c = res.content[0] - '0';
+  free_response(&res);
+
+  return c;
 }
 
 void send_board_to_server(int server_fd, char *board, int *status) {
@@ -109,8 +122,8 @@ void send_board_to_server(int server_fd, char *board, int *status) {
                             "Content-type: text/plain\r\n"
                             "Content-length: %d\r\n"
                             "\r\n"
-                            "%s\r\n",
-                            SERVER_IP, PORT, BOARD_SIZE + 2, board
+                            "B4-%s\r\n",
+                            SERVER_IP, PORT, BOARD_MSG_LEN, board
 
   );
 
