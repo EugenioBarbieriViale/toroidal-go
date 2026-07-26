@@ -183,8 +183,8 @@ int move(int fc, const int color, int *board, const int all_neighbors[][4],
 
 void score(int board[], const int all_neighbors[][4], int *black_score,
            int *white_score) {
-  int score_board[N_INTERS];
-  clone_arr(board, score_board, N_INTERS);
+  int score_board[BOARD_SIZE];
+  clone_arr(board, score_board, BOARD_SIZE);
 
   Stack empties;
   construct(&empties);
@@ -195,7 +195,7 @@ void score(int board[], const int all_neighbors[][4], int *black_score,
   int fempty = 0;
 
   while (1) {
-    fempty = get_idx(EMPTY, N_INTERS, score_board);
+    fempty = get_idx(EMPTY, BOARD_SIZE, score_board);
     if (fempty == -1)
       break;
 
