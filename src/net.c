@@ -1,5 +1,6 @@
-#include "../src/rules.h"
-#include "httplib.h"
+#include "net.h"
+#include "../http-server/httplib.h"
+#include "rules.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -8,15 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-
-#define N_LINES 19
-#define BOARD_SIZE ((N_LINES) * (N_LINES))
-
-#define BOARD_MSG_LEN (BOARD_SIZE + 3)
-#define INIT_BUF_LEN 256
-
-#define SERVER_IP "127.0.0.1"
-const int PORT = 8080;
 
 // accept bool as condition, then message
 static inline void check(int *status, const char *msg, int include_zero) {
@@ -28,21 +20,16 @@ static inline void check(int *status, const char *msg, int include_zero) {
   }
 }
 
-int send_greetings(int);
-int get_color(int);
-void send_board_to_server(int, char *, int *);
-
-int main() {
+int talk_to_server() {
   int status;
 
   int s = socket(AF_INET, SOCK_STREAM, 0);
   check(&s, "Failed to create a socket", 0);
 
-  struct sockaddr_in server_addr = {
-      AF_INET,
-      htons(PORT),
-      0,
-  };
+  struct sockaddr_in server_addr;
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+  server_addr.sin_port = htons(PORT);
 
   status = inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr);
   check(&status, "Invalid address", 1);
@@ -56,22 +43,24 @@ int main() {
   const int color = get_color(s);
   printf("MY COLOR: %d\n", color);
 
-  if (color == BLACK) {
-    char board[BOARD_SIZE + 1];
-    for (int i = 0; i < BOARD_SIZE; i++)
-      board[i] = EMPTY + '0';
-    board[BOARD_SIZE] = '\0';
-
-    send_board_to_server(s, board, &status);
-    check(&status, "Failed to send message to socket", 0);
-
-    char buf[INIT_BUF_LEN * 2];
-    int n = recv(s, buf, INIT_BUF_LEN * 2, 0);
-    check(&n, "Failed to get board from server", 0);
-    printf("%s\n", buf);
-  }
-
-  return 0;
+  // if (color == BLACK) {
+  //   char board[BOARD_SIZE + 1];
+  //   for (int i = 0; i < BOARD_SIZE; i++)
+  //     board[i] = EMPTY + '0';
+  //   board[BOARD_SIZE] = '\0';
+  //
+  //   send_board_to_server(s, board, &status);
+  //   check(&status, "Failed to send message to socket", 0);
+  //
+  //   char buf[INIT_BUF_LEN * 2];
+  //   ssize_t n = recv(s, buf, INIT_BUF_LEN * 2, 0);
+  //   if (n < 0) {
+  //     perror("Failed to get board from server");
+  //     exit(EXIT_FAILURE);
+  //   }
+  //   printf("%s\n", buf);
+  // }
+  return s;
 }
 
 int send_greetings(int server_fd) {

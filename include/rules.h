@@ -4,7 +4,7 @@
 #include "stack.h"
 
 #define N_LINES 19
-#define N_INTERS (N_LINES * N_LINES)
+#define BOARD_SIZE (N_LINES * N_LINES)
 
 #define BLACK 1
 #define WHITE 2
