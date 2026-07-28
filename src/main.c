@@ -1,5 +1,4 @@
 #include "gxf.h"
-#include "net.h"
 #include "rules.h"
 #include <stdio.h> // for debug, then remove
 
@@ -7,15 +6,11 @@
 #include <emscripten/emscripten.h>
 #endif
 
-int init_buf_len = 3 * INIT_BUF_LEN;
+int init_buf_len = 3 * 256;
 
 void UpdateDrawFrame(void *);
 
 int main() {
-  // int server_fd = init_connection();
-  // const int color = get_color_from_server(server_fd);
-  // printf("RECEIVED COLOR :%d\n", color);
-
   MainLoopArg *main_loop_arg = gxf_init(1);
 
 #if defined(PLATFORM_WEB)
@@ -29,7 +24,6 @@ int main() {
 #endif
 
   gxf_cleanup(main_loop_arg);
-  // close_connection(server_fd);
 
   return 0;
 }
