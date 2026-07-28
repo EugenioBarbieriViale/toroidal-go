@@ -4,6 +4,8 @@
 
 int ko_point = -1;
 
+static void get_neighbors(int, int *);
+
 static int get_idx(int, int, int *);
 static void flood_fill(int, int *, const int[][4], Stack *, Stack *);
 
@@ -21,7 +23,24 @@ static inline void clone_arr(int from[], int to[], int len) {
     to[i] = from[i];
 }
 
-void get_neighbors(int fc, int out[]) {
+BoardState *init_bs(const int player_color) {
+  BoardState *bs = malloc(sizeof(BoardState));
+
+  bs->fc = -1;
+  bs->color = player_color;
+
+  for (int i = 0; i < BOARD_SIZE; i++) {
+    bs->board[i] = EMPTY;
+    get_neighbors(i, bs->all_neighbors[i]);
+  }
+
+  construct(&bs->reached);
+  construct(&bs->chain);
+
+  return bs;
+}
+
+static void get_neighbors(int fc, int out[]) {
   Coord2 c = unflatten(fc);
 
   Coord2 ns[4];
@@ -103,12 +122,17 @@ static int maybe_capture(unsigned int libs, int board[], Stack *chain) {
   return 0;
 }
 
-int move(int fc, const int color, int *board, const int all_neighbors[][4],
-         Stack *reached, Stack *chain, char *return_buf, int *buf_len) {
+int move(BoardState *bs, char *return_buf, int *buf_len) {
+  Coord2 c = unflatten(bs->fc);
 
-  Coord2 c = unflatten(fc);
+  if (bs->fc < 0 || bs->fc > BOARD_SIZE) {
+    *buf_len = snprintf(return_buf, *buf_len,
+                        "ILLEGAL MOVE: position (%d, %d) is out of bounds",
+                        c.row, c.col);
+    return 1;
+  }
 
-  if (board[fc] != EMPTY) {
+  if (bs->board[bs->fc] != EMPTY) {
     *buf_len =
         snprintf(return_buf, *buf_len,
                  "ILLEGAL MOVE: (%d, %d) already occupied", c.row, c.col);
@@ -116,7 +140,7 @@ int move(int fc, const int color, int *board, const int all_neighbors[][4],
     return 1;
   }
 
-  if (fc == ko_point) {
+  if (bs->fc == ko_point) {
     *buf_len = snprintf(return_buf, *buf_len,
                         "ILLEGAL MOVE: ko violation at (%d, %d)", c.row, c.col);
     // printf("ILLEGAL MOVE: ko violation at (%d, %d)\n", c.row, c.col);
@@ -125,14 +149,14 @@ int move(int fc, const int color, int *board, const int all_neighbors[][4],
 
   ko_point = -1;
 
-  board[fc] = color;
+  bs->board[bs->fc] = bs->color;
 
   Stack opp_stones;
   construct(&opp_stones);
 
   for (int i = 0; i < 4; i++) {
-    int fn = all_neighbors[fc][i];
-    if (board[fn] != EMPTY && board[fn] != color)
+    int fn = bs->all_neighbors[bs->fc][i];
+    if (bs->board[fn] != EMPTY && bs->board[fn] != bs->color)
       push(fn, &opp_stones);
   }
 
@@ -141,26 +165,26 @@ int move(int fc, const int color, int *board, const int all_neighbors[][4],
 
   for (int i = 0; i <= opp_stones.top; i++) {
     int fn = opp_stones.buffer[i];
-    if (board[fn] == EMPTY)
+    if (bs->board[fn] == EMPTY)
       continue;
 
-    int unsigned fn_libs =
-        get_liberties(fn, board, all_neighbors, reached, chain);
+    int unsigned fn_libs = get_liberties(fn, bs->board, bs->all_neighbors,
+                                         &bs->reached, &bs->chain);
 
     // remove opponent's stones
-    if (maybe_capture(fn_libs, board, chain)) {
-      captured_stone_count += chain->top + 1;
+    if (maybe_capture(fn_libs, bs->board, &bs->chain)) {
+      captured_stone_count += bs->chain.top + 1;
 
-      if (chain->top == 0)
-        single_capture_point = chain->buffer[0];
+      if (bs->chain.top == 0)
+        single_capture_point = bs->chain.buffer[0];
     }
   }
 
-  int unsigned fc_libs =
-      get_liberties(fc, board, all_neighbors, reached, chain);
+  int unsigned fc_libs = get_liberties(bs->fc, bs->board, bs->all_neighbors,
+                                       &bs->reached, &bs->chain);
 
   if (fc_libs == 0) {
-    board[fc] = EMPTY;
+    bs->board[bs->fc] = EMPTY;
     *buf_len = snprintf(return_buf, *buf_len,
                         "ILLEGAL MOVE: suicide at (%d, %d)", c.row, c.col);
     // printf("ILLEGAL MOVE: suicide at (%d, %d)\n", c.row, c.col);
@@ -168,7 +192,7 @@ int move(int fc, const int color, int *board, const int all_neighbors[][4],
     return 1;
   }
 
-  int fc_group_size = chain->top + 1;
+  int fc_group_size = bs->chain.top + 1;
   if (captured_stone_count == 1 && fc_libs == 1 && fc_group_size == 1)
     ko_point = single_capture_point;
   else

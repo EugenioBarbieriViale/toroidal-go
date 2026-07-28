@@ -1,5 +1,5 @@
 #include "net.h"
-#include "../http-server/httplib.h"
+#include "httplib.h"
 #include "rules.h"
 
 #include <arpa/inet.h>
@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <unistd.h>
+
+int send_greetings(int);
 
 // accept bool as condition, then message
 static inline void check(int *status, const char *msg, int include_zero) {
@@ -20,7 +23,7 @@ static inline void check(int *status, const char *msg, int include_zero) {
   }
 }
 
-int talk_to_server() {
+int init_connection() {
   int status;
 
   int s = socket(AF_INET, SOCK_STREAM, 0);
@@ -39,9 +42,6 @@ int talk_to_server() {
 
   status = send_greetings(s);
   check(&status, "Failed to send greetings", 0);
-
-  const int color = get_color(s);
-  printf("MY COLOR: %d\n", color);
 
   // if (color == BLACK) {
   //   char board[BOARD_SIZE + 1];
@@ -63,6 +63,11 @@ int talk_to_server() {
   return s;
 }
 
+int close_connection(int server_fd) {
+  int status = close(server_fd);
+  return status;
+}
+
 int send_greetings(int server_fd) {
   char send_buf[INIT_BUF_LEN];
 
@@ -82,7 +87,7 @@ int send_greetings(int server_fd) {
   return status;
 }
 
-int get_color(int server_fd) {
+int get_color_from_server(int server_fd) {
   char buf[INIT_BUF_LEN] = {' '};
   int n = recv(server_fd, buf, INIT_BUF_LEN, 0);
   check(&n, "Failed to get color from server", 0);

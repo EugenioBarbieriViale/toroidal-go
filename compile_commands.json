@@ -3,11 +3,28 @@
     "file": "src/main.c",
     "arguments": [
       "/usr/sbin/gcc",
-      "src/main.c",
       "-o",
       "main",
+      "src/main.c",
       "-g",
-      "-Os"
+      "-Os",
+      "-I",
+      "include"
+    ],
+    "directory": "/home/eu/programming/tgo",
+    "output": "main"
+  },
+  {
+    "file": "src/gxf.c",
+    "arguments": [
+      "/usr/sbin/gcc",
+      "-o",
+      "main",
+      "src/gxf.c",
+      "-g",
+      "-Os",
+      "-I",
+      "include"
     ],
     "directory": "/home/eu/programming/tgo",
     "output": "main"

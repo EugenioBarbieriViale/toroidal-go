@@ -1,7 +1,7 @@
 CC = gcc
 EMCC = emcc
 
-CFLAGS = -g -Os
+CFLAGS = -g -Os -I include src/rules.c src/stack.c src/gxf.c src/net.c src/httplib.c
 DBG_CFLAGS = $(CFLAGS) -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
 WEB_CFLAGS = -Os -s USE_GLFW=3 -s TOTAL_STACK=64MB -s INITIAL_MEMORY=128MB -s ASSERTIONS --preload-file assets -DPLATFORM_WEB
 
@@ -12,7 +12,7 @@ RAYLIB_WEB_CFLAGS = -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
 RAYLIB_WEB_OBJS = rcore.o rshapes.o rtextures.o rtext.o rmodels.o raudio.o
 
 native: src/main.c
-	$(CC) src/main.c -o main \
+	$(CC) -o main src/main.c src/gxf.c \
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
 		$(CFLAGS)
 
@@ -35,12 +35,12 @@ web: src/main.c
 		$(WEB_CFLAGS)
 
 debug: src/main.c
-	$(CC) src/main.c -o main \
+	$(CC) -o main src/main.c \
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
 		$(DBG_CFLAGS)
 
 server: src/server.c
-	$(CC) src/rules.c src/stack.c src/server.c -o server \
+	$(CC) -o server server.c \
 		$(DBG_CFLAGS)
 
 run:

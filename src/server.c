@@ -1,6 +1,3 @@
-// board format:
-// BN-board
-
 #include "../src/rules.h"
 #include "httplib.h"
 
@@ -14,10 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define N_LINES 19
-#define BOARD_SIZE ((N_LINES) * (N_LINES))
 #define BOARD_MSG_LEN (BOARD_SIZE + 3)
-
 #define INIT_BUF_LEN 256
 
 const int MAX_CONNECTIONS = 10;
@@ -29,30 +23,6 @@ static inline void check(int *status, const char *msg) {
     printf("errno: (%d)\n", errno);
     exit(EXIT_FAILURE);
   }
-}
-
-typedef struct {
-  int fc;
-  int color;
-
-  int board[BOARD_SIZE];
-  int all_neighbors[BOARD_SIZE][4];
-
-  Stack reached;
-  Stack chain;
-} BoardState;
-
-void init_bs(BoardState *bs) {
-  bs->fc = -1;
-  bs->color = UNDEF;
-
-  for (int i = 0; i < BOARD_SIZE; i++) {
-    bs->board[i] = EMPTY;
-    get_neighbors(i, bs->all_neighbors[i]);
-  }
-
-  construct(&bs->reached);
-  construct(&bs->chain);
 }
 
 int create_client(int);

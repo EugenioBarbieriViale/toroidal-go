@@ -5,12 +5,12 @@
 #define INIT_BUF_LEN 256
 
 #define SERVER_IP "127.0.0.1"
-const int PORT = 8080;
+#define PORT ((int)8080)
 
-int talk_to_server(void);
-int send_greetings(int);
+int init_connection(void);
+int close_connection(int);
+int get_color_from_server(int);
 
-int get_color(int);
 void send_board_to_server(int, char *, int *);
 
 #endif

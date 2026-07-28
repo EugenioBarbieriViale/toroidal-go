@@ -1,6 +1,8 @@
 #ifndef GXF_H
 #define GXF_H
 
+#include "rules.h"
+
 #if defined(PLATFORM_WEB)
 #include "./external/raylib/src/raylib.h"
 #include "./external/raylib/src/raymath.h"
@@ -29,14 +31,15 @@ static inline float dist(Vector3 v, Vector3 w) {
 #define IS_ZERO(v) (Vector3Length(v) < EPS)
 #define ARE_EQUAL(v, w) (dist(v, w) < EPS)
 
-#define N_LINES 18
-#define N_INTERS (N_LINES * N_LINES)
 #define UNIT_ANGLE (2.f * PI / (float)N_LINES)
 
 #define SBLACK 1
 #define SWHITE 2
 #define EMPTY 0
 #define UNDEF 3
+
+#define COLLISION_RADIUS (0.2f)
+#define ORIGIN ((Vector3){0.f, 0.f, 0.f})
 
 typedef struct {
   Camera camera;
@@ -45,10 +48,7 @@ typedef struct {
   Model black;
   Model white;
 
-  Vector3 stones[N_INTERS];
-  int board_state[N_INTERS];
-
-  Vector3 intersections[N_INTERS];
+  Vector3 intersections[BOARD_SIZE];
   Vector3 *sorted_inters;
 
   Vector3 focused_stone;
@@ -57,11 +57,16 @@ typedef struct {
 
   int camera_mode;
   Color camera_color;
+
+  BoardState *bs;
 } MainLoopArg;
 
-MainLoopArg *gxf_init(void);
-void gxf_update(MainLoopArg *);
+MainLoopArg *gxf_init(int);
+Vector3 gxf_update(MainLoopArg *);
 void gxf_draw(MainLoopArg *);
 void gxf_cleanup(MainLoopArg *);
+
+int try_place_stone(Vector3, MainLoopArg *);
+void update_board(MainLoopArg *);
 
 #endif

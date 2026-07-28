@@ -16,8 +16,20 @@ typedef struct {
   int col;
 } Coord2;
 
-void get_neighbors(int, int *);
-int move(int, int, int *, const int[][4], Stack *, Stack *, char *, int *);
+typedef struct {
+  int fc;
+  int color;
+
+  int board[BOARD_SIZE];
+  int all_neighbors[BOARD_SIZE][4];
+
+  Stack reached;
+  Stack chain;
+} BoardState;
+
+BoardState *init_bs(const int);
+
+int move(BoardState *bs, char *, int *);
 void score(int *, const int[][4], int *, int *);
 
 #endif
