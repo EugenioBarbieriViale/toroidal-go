@@ -36,7 +36,6 @@ void UpdateDrawFrame(void *arg_) {
   else
     arg->bs->color = SWHITE;
 
-  // you need to update first, so that the intersections are sorted first
   Vector3 mouse_delta = gxf_update(arg);
   arg->bs->fc = try_place_stone(mouse_delta, arg);
 
@@ -45,13 +44,13 @@ void UpdateDrawFrame(void *arg_) {
     int ans = move(arg->bs, msg, &init_buf_len);
     printf("\n%s\n", msg);
 
-    printf("-------------------------------------------------------\n");
-    for (int i = 0; i < BOARD_SIZE; i++) {
-      if (i != 0 && i % N_LINES == 0)
-        printf("\n");
-      printf(" % d", arg->bs->board[i]);
-    }
-    printf("\n-------------------------------------------------------\n");
+    // printf("-------------------------------------------------------\n");
+    // for (int i = 0; i < BOARD_SIZE; i++) {
+    //   if (i != 0 && i % N_LINES == 0)
+    //     printf("\n");
+    //   printf(" % d", arg->bs->board[i]);
+    // }
+    // printf("\n-------------------------------------------------------\n");
 
     if (ans == 0)
       update_available(arg);

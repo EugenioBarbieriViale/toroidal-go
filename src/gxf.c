@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-void control_camera(Camera *, Vector3 *, int *);
+void control_camera(Camera *, Vector3 *, int);
 
 int try_place_stone_keyboard(MainLoopArg *);
 int try_place_stone_mouse(Vector3, MainLoopArg *);
@@ -30,6 +30,7 @@ MainLoopArg *gxf_init(const int player_color) {
 
   srand(time(NULL));
 
+  SetWindowState(FLAG_WINDOW_RESIZABLE);
   InitWindow(W, H, "Toroidal Go");
   DisableCursor();
 
@@ -72,8 +73,23 @@ Vector3 gxf_update(MainLoopArg *arg) {
   else
     sort_points(arg->count, arg->available_points, arg->camera.position);
 
+  if (IsKeyPressed(KEY_X)) {
+    arg->camera.position = Vector3Scale(arg->camera.position, -1.f);
+  }
+
+  static int was_pressed_r = 0;
+  if (IsKeyPressed(KEY_R)) {
+    was_pressed_r++;
+    if (was_pressed_r % 2 == 0)
+      arg->camera_mode = CAMERA_FIRST_PERSON;
+    else
+      arg->camera_mode = CAMERA_THIRD_PERSON;
+
+    arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
+  }
+
   Vector3 mouse_delta;
-  control_camera(&arg->camera, &mouse_delta, &arg->camera_mode);
+  control_camera(&arg->camera, &mouse_delta, arg->camera_mode);
 
   return mouse_delta;
 }
@@ -104,7 +120,10 @@ void gxf_draw(MainLoopArg *arg) {
 
   EndMode3D();
 
+#if defined(PLATFROM_WEB)
+#else
   DrawText(TextFormat("%.2f", 1.f / GetFrameTime()), 10, 10, 20, WHITE);
+#endif
 
   EndDrawing();
 }
@@ -122,22 +141,12 @@ void gxf_cleanup(MainLoopArg *arg) {
   CloseWindow();
 }
 
-void control_camera(Camera *camera, Vector3 *mouse_delta, int *camera_mode) {
-  if (IsKeyPressed(KEY_ONE)) {
-    *camera_mode = CAMERA_FIRST_PERSON;
-    camera->up = (Vector3){0.0f, 1.0f, 0.0f};
-  }
-
-  if (IsKeyPressed(KEY_TWO)) {
-    *camera_mode = CAMERA_THIRD_PERSON;
-    camera->up = (Vector3){0.0f, 1.0f, 0.0f};
-  }
-
+void control_camera(Camera *camera, Vector3 *mouse_delta, int camera_mode) {
   static bool was_moving = false;
   bool moving = is_moving();
   if (moving && !was_moving)
     DisableCursor();
-  if (*camera_mode != CAMERA_THIRD_PERSON && !moving && was_moving)
+  if (camera_mode != CAMERA_THIRD_PERSON && !moving && was_moving)
     EnableCursor();
   was_moving = moving;
 
@@ -165,7 +174,7 @@ void control_camera(Camera *camera, Vector3 *mouse_delta, int *camera_mode) {
   if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))
     movement.y -= 0.3f;
 
-  if (*camera_mode == CAMERA_THIRD_PERSON) {
+  if (camera_mode == CAMERA_THIRD_PERSON) {
     Vector2 mouseDelta = GetMouseDelta();
     rotation.x = mouseDelta.x * 0.05f;
     rotation.y = mouseDelta.y * 0.05f;
