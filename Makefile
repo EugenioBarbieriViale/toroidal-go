@@ -1,9 +1,10 @@
 CC = gcc
 EMCC = emcc
 
-CFLAGS = -g -Os -I include src/rules.c src/stack.c src/gxf.c src/net.c src/httplib.c
-DBG_CFLAGS = $(CFLAGS) -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
-WEB_CFLAGS = -Os -s USE_GLFW=3 -s TOTAL_STACK=64MB -s INITIAL_MEMORY=128MB -s ASSERTIONS --preload-file assets -DPLATFORM_WEB
+CFLAGS = -g -Os -I include 
+SRC_FILES = src/rules.c src/stack.c src/gxf.c
+DBG_CFLAGS = $(CFLAGS) $(SRC_FILES) -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
+WEB_CFLAGS = $(SRC_FILES) -Os -s USE_GLFW=3 -s TOTAL_STACK=64MB -s INITIAL_MEMORY=128MB -s ASSERTIONS --preload-file assets -DPLATFORM_WEB --shell-file shell.html
 
 EMSDK_ENV = /home/eu/programming/tgo/external/emsdk/emsdk_env.sh
 RAYLIB_SRC = /home/eu/programming/tgo/external/raylib/src
@@ -32,6 +33,7 @@ web: src/main.c
 		./external/raylib/src/libraylib.a \
 		-I. -I./external/raylib/src/raylib.h \
 		-L. -L./external/raylib/src/libraylib.a \
+		-I include \
 		$(WEB_CFLAGS)
 
 debug: src/main.c
