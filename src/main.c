@@ -53,8 +53,8 @@ void UpdateDrawFrame(void *arg_) {
     }
     printf("\n-------------------------------------------------------\n");
 
-    if (ans != 1)
-      update_board(arg);
+    if (ans == 0)
+      update_available(arg);
   }
 
   gxf_draw(arg);

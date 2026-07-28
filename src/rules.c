@@ -37,6 +37,8 @@ BoardState *init_bs(const int player_color) {
   construct(&bs->reached);
   construct(&bs->chain);
 
+  bs->captured_stone_count = 0;
+
   return bs;
 }
 
@@ -160,7 +162,7 @@ int move(BoardState *bs, char *return_buf, int *buf_len) {
       push(fn, &opp_stones);
   }
 
-  int unsigned captured_stone_count = 0;
+  bs->captured_stone_count = 0;
   int single_capture_point = -1;
 
   for (int i = 0; i <= opp_stones.top; i++) {
@@ -173,7 +175,7 @@ int move(BoardState *bs, char *return_buf, int *buf_len) {
 
     // remove opponent's stones
     if (maybe_capture(fn_libs, bs->board, &bs->chain)) {
-      captured_stone_count += bs->chain.top + 1;
+      bs->captured_stone_count += bs->chain.top + 1;
 
       if (bs->chain.top == 0)
         single_capture_point = bs->chain.buffer[0];
@@ -193,7 +195,7 @@ int move(BoardState *bs, char *return_buf, int *buf_len) {
   }
 
   int fc_group_size = bs->chain.top + 1;
-  if (captured_stone_count == 1 && fc_libs == 1 && fc_group_size == 1)
+  if (bs->captured_stone_count == 1 && fc_libs == 1 && fc_group_size == 1)
     ko_point = single_capture_point;
   else
     ko_point = -1;

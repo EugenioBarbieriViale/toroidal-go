@@ -42,6 +42,11 @@ static inline float dist(Vector3 v, Vector3 w) {
 #define ORIGIN ((Vector3){0.f, 0.f, 0.f})
 
 typedef struct {
+  Vector3 pos;
+  int idx;
+} AvailablePoint;
+
+typedef struct {
   Camera camera;
 
   Model torus;
@@ -49,16 +54,14 @@ typedef struct {
   Model white;
 
   Vector3 intersections[BOARD_SIZE];
-  Vector3 *sorted_inters;
+  BoardState *bs;
 
+  AvailablePoint available_points[BOARD_SIZE];
   Vector3 focused_stone;
-  int count_from_closest;
   int count;
 
   int camera_mode;
   Color camera_color;
-
-  BoardState *bs;
 } MainLoopArg;
 
 MainLoopArg *gxf_init(int);
@@ -67,6 +70,6 @@ void gxf_draw(MainLoopArg *);
 void gxf_cleanup(MainLoopArg *);
 
 int try_place_stone(Vector3, MainLoopArg *);
-void update_board(MainLoopArg *);
+void update_available(MainLoopArg *);
 
 #endif

@@ -5,15 +5,12 @@
 
 void control_camera(Camera *, Vector3 *, int *);
 
-int get_stone_idx(Vector3 *, Vector3 *);
-void pop_stone(int, int, Vector3 **);
-
 int try_place_stone_keyboard(MainLoopArg *);
 int try_place_stone_mouse(Vector3, MainLoopArg *);
 
 void compute_inters(Vector3 *);
-void sort_inters(int, Vector3 **, Vector3);
-void draw_inters(Vector3 *, Vector3 *);
+void sort_points(int, AvailablePoint[], Vector3);
+void draw_inters(Vector3, Vector3 *);
 
 static inline int is_moving(void) {
   return (IsKeyDown(KEY_W) || IsKeyDown(KEY_S) || IsKeyDown(KEY_A) ||
@@ -57,28 +54,23 @@ MainLoopArg *gxf_init(const int player_color) {
   arg->white.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
   compute_inters(arg->intersections);
+  arg->bs = init_bs(player_color);
 
-  arg->sorted_inters = (Vector3 *)malloc(BOARD_SIZE * sizeof(Vector3));
-  compute_inters(arg->sorted_inters);
+  update_available(arg);
 
-  arg->focused_stone = arg->sorted_inters[0];
-  arg->count_from_closest = 0;
-  arg->count = 0;
+  arg->focused_stone = arg->available_points[0].pos;
 
   arg->camera_mode = CAMERA_FIRST_PERSON;
   arg->camera_color = get_rnd_color();
-
-  arg->bs = init_bs(player_color);
 
   return arg;
 }
 
 Vector3 gxf_update(MainLoopArg *arg) {
-  int new_len = BOARD_SIZE - arg->count;
   if (arg->camera_mode == CAMERA_THIRD_PERSON)
-    sort_inters(new_len, &arg->sorted_inters, arg->camera.target);
+    sort_points(arg->count, arg->available_points, arg->camera.target);
   else
-    sort_inters(new_len, &arg->sorted_inters, arg->camera.position);
+    sort_points(arg->count, arg->available_points, arg->camera.position);
 
   Vector3 mouse_delta;
   control_camera(&arg->camera, &mouse_delta, &arg->camera_mode);
@@ -93,7 +85,7 @@ void gxf_draw(MainLoopArg *arg) {
   BeginMode3D(arg->camera);
 
   DrawModel(arg->torus, (Vector3){0.f, 0.f, 0.f}, 1, BEIGE);
-  draw_inters(&arg->focused_stone, arg->intersections);
+  draw_inters(arg->focused_stone, arg->intersections);
 
   for (int i = 0; i < BOARD_SIZE; i++) {
     switch (arg->bs->board[i]) {
@@ -122,7 +114,6 @@ void gxf_cleanup(MainLoopArg *arg) {
   UnloadModel(arg->black);
   UnloadModel(arg->white);
 
-  free(arg->sorted_inters);
   free(arg->bs->reached.buffer);
   free(arg->bs->chain.buffer);
   free(arg->bs);
@@ -183,32 +174,15 @@ void control_camera(Camera *camera, Vector3 *mouse_delta, int *camera_mode) {
   UpdateCameraPro(camera, movement, rotation, zoom);
 }
 
-int get_stone_idx(Vector3 *s, Vector3 *stones) {
+void update_available(MainLoopArg *arg) {
+  arg->count = 0;
   for (int i = 0; i < BOARD_SIZE; i++) {
-    if (ARE_EQUAL(stones[i], *s))
-      return i;
-  }
-  return -1;
-}
-
-void pop_stone(int idx, int last_idx, Vector3 **sorted_inters) {
-  if (idx < 0 || idx > last_idx)
-    abort();
-
-  if (last_idx == 0)
-    return;
-
-  (*sorted_inters)[idx] = (*sorted_inters)[last_idx];
-
-  if ((BOARD_SIZE - last_idx) % REALLOC_THRESHOLD == 0) {
-    Vector3 *tmp_ptr =
-        realloc(*sorted_inters, (last_idx + 1) * sizeof(Vector3));
-    if (tmp_ptr) {
-      // printf("REALLOCATING, LENGTH IS NOW %d\n", last_idx + 1);
-      *sorted_inters = tmp_ptr;
-    } else {
-      // perror("Error reallocating memory");
-      abort();
+    int stone = arg->bs->board[i];
+    if (stone == EMPTY || stone == UNDEF) {
+      arg->available_points[arg->count++] = (AvailablePoint){
+          .idx = i,
+          .pos = arg->intersections[i],
+      };
     }
   }
 }
@@ -227,20 +201,22 @@ int try_place_stone(Vector3 mouse_delta, MainLoopArg *arg) {
 }
 
 int try_place_stone_keyboard(MainLoopArg *arg) {
+  static int count_from_closest = 0;
+
   if (IsKeyPressed(KEY_E) && IsKeyDown(KEY_LEFT_SHIFT)) {
-    if (arg->count_from_closest > 0)
-      arg->count_from_closest--;
-  } else if (IsKeyPressed(KEY_E) && arg->count_from_closest < BOARD_SIZE)
-    arg->count_from_closest++;
+    if (count_from_closest > 0)
+      count_from_closest--;
+  } else if (IsKeyPressed(KEY_E) && count_from_closest < BOARD_SIZE)
+    count_from_closest++;
 
   if (is_moving())
-    arg->count_from_closest = 0;
+    count_from_closest = 0;
 
-  arg->focused_stone = arg->sorted_inters[arg->count_from_closest];
+  arg->focused_stone = arg->available_points[count_from_closest].pos;
 
   if (IsKeyPressed(KEY_ENTER)) {
-    int i = get_stone_idx(&arg->focused_stone, arg->intersections);
-    return i;
+    count_from_closest = 0;
+    return arg->available_points[count_from_closest].idx;
   }
 
   return -1;
@@ -252,30 +228,16 @@ int try_place_stone_mouse(Vector3 mouse_delta, MainLoopArg *arg) {
 
   Ray ray = GetScreenToWorldRay(GetMousePosition(), arg->camera);
 
-  int new_len = BOARD_SIZE - arg->count;
-  for (int i = 0; i < new_len; i++) {
-    RayCollision collision =
-        GetRayCollisionSphere(ray, arg->sorted_inters[i], COLLISION_RADIUS);
+  for (int i = 0; i < arg->count; i++) {
+    RayCollision collision = GetRayCollisionSphere(
+        ray, arg->available_points[i].pos, COLLISION_RADIUS);
 
     if (collision.hit && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-      arg->focused_stone = arg->sorted_inters[i];
-      // arg->count_from_closest =
-      //     get_stone_idx(&arg->focused_stone, arg->intersections);
-      arg->count_from_closest = i;
-      return get_stone_idx(&arg->focused_stone, arg->intersections);
+      return arg->available_points[i].idx;
     }
   }
 
   return -1;
-}
-
-void update_board(MainLoopArg *arg) {
-  int new_len = BOARD_SIZE - arg->count;
-
-  arg->count++;
-  pop_stone(arg->count_from_closest, new_len - 1, &arg->sorted_inters);
-
-  arg->count_from_closest = 0;
 }
 
 void compute_inters(Vector3 *intersections) {
@@ -294,38 +256,36 @@ void compute_inters(Vector3 *intersections) {
   }
 }
 
-void sort_inters(int new_len, Vector3 **to_sort_inters, Vector3 cam_pos) {
-  float distances[new_len];
-  for (int i = 0; i < new_len; i++) {
-    distances[i] = dist(cam_pos, (*to_sort_inters)[i]);
+void sort_points(int count, AvailablePoint available_points[],
+                 Vector3 cam_pos) {
+  float distances[count];
+  for (int i = 0; i < count; i++) {
+    distances[i] = dist(cam_pos, available_points[i].pos);
   }
 
-  for (int i = 1; i < new_len; i++) {
-    Vector3 key_vec = (*to_sort_inters)[i];
+  for (int i = 1; i < count; i++) {
+    AvailablePoint key_point = available_points[i];
     float key_dst = distances[i];
     int j = i - 1;
 
     while (j >= 0 && distances[j] > key_dst) {
-      (*to_sort_inters)[j + 1] = (*to_sort_inters)[j];
+      available_points[j + 1] = available_points[j];
       distances[j + 1] = distances[j];
       j--;
     }
 
-    (*to_sort_inters)[j + 1] = key_vec;
+    available_points[j + 1] = key_point;
     distances[j + 1] = key_dst;
   }
 }
 
-void draw_inters(Vector3 *focused_stone, Vector3 *intersections) {
+void draw_inters(Vector3 focused_stone, Vector3 *intersections) {
   Color color = RED;
   for (int i = 0; i < BOARD_SIZE; i++) {
     Vector3 v = intersections[i];
     color = RED;
 
-    // if (IS_ZERO(v))
-    //   continue;
-
-    if (ARE_EQUAL(v, *focused_stone))
+    if (ARE_EQUAL(v, focused_stone))
       color = GREEN;
 
     DrawCubeV(v, (Vector3){0.2f, 0.2f, 0.2f}, color);
