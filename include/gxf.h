@@ -53,6 +53,8 @@ typedef struct {
   Model black;
   Model white;
 
+  Font font;
+
   Vector3 intersections[BOARD_SIZE];
   BoardState *bs;
 
@@ -64,7 +66,7 @@ typedef struct {
   Color camera_color;
 } MainLoopArg;
 
-void show_welcome_screen(void);
+void show_welcome_screen(Font);
 
 MainLoopArg *gxf_init(int);
 Vector3 gxf_update(MainLoopArg *);

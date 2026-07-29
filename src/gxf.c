@@ -1,6 +1,5 @@
 #include "gxf.h"
 #include "rules.h"
-#include <raylib.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -20,8 +19,8 @@ static inline int is_moving(void) {
 }
 
 static inline Color get_rnd_color(void) {
-  Color colors[9] = {BLACK, YELLOW, RED,    PURPLE, BLUE,
-                     GREEN, BROWN,  ORANGE, PINK};
+  Color colors[9] = {SKYBLUE, YELLOW, RED,    PURPLE, BLUE,
+                     GREEN,   BEIGE,  ORANGE, PINK};
   int ci = rand() % 9;
   return colors[ci];
 }
@@ -54,6 +53,9 @@ MainLoopArg *gxf_init(const int player_color) {
   texture = LoadTexture("./assets/white_marble.png");
   arg->white.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
+  // arg->font = LoadFont("./assets/IosevkaNerdFont-Regular.ttf");
+  arg->font = LoadFont("./assets/IosevkaNerdFont-Bold.ttf");
+
   compute_inters(arg->intersections);
   arg->bs = init_bs(player_color);
 
@@ -62,6 +64,7 @@ MainLoopArg *gxf_init(const int player_color) {
   arg->focused_stone = arg->available_points[0].pos;
 
 #if defined(PLATFORM_WEB)
+  DisableCursor();
   arg->camera_mode = CAMERA_THIRD_PERSON;
 #else
   arg->camera_mode = CAMERA_FIRST_PERSON;
@@ -83,12 +86,21 @@ Vector3 gxf_update(MainLoopArg *arg) {
     arg->camera.target = Vector3Scale(arg->camera.target, -1.f);
   }
 
+#if defined(PLATFORM_WEB)
+  static int was_pressed_r = 1;
+#else
   static int was_pressed_r = 0;
+#endif
+
   if (IsKeyPressed(KEY_R)) {
-    if (was_pressed_r % 2 == 0)
+    if (was_pressed_r % 2 == 0) {
+      DisableCursor();
       arg->camera_mode = CAMERA_THIRD_PERSON;
-    else
+    } else {
+      if (!is_moving())
+        EnableCursor();
       arg->camera_mode = CAMERA_FIRST_PERSON;
+    }
 
     arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
     was_pressed_r++;
@@ -144,6 +156,8 @@ void gxf_cleanup(MainLoopArg *arg) {
   UnloadModel(arg->black);
   UnloadModel(arg->white);
 
+  UnloadFont(arg->font);
+
   free(arg->bs->reached.buffer);
   free(arg->bs->chain.buffer);
   free(arg->bs);
@@ -153,56 +167,55 @@ void gxf_cleanup(MainLoopArg *arg) {
 }
 
 void static inline center_text_to_h(float fh, const char *text, int w, int h,
-                                    int font_size, Color color) {
-  int text_width = MeasureText(text, font_size);
-  DrawText(text, (w - text_width) / 2, fh * h, font_size, color);
+                                    Font f, Color color) {
+  Vector2 text_dims = MeasureTextEx(f, text, (float)f.baseSize, 2);
+  DrawTextEx(f, text, (Vector2){(w - text_dims.x) / 2.f, fh * h},
+             (float)f.baseSize, 2, color);
 }
 
-void show_welcome_screen() {
+void show_welcome_screen(Font f) {
   BeginDrawing();
-  ClearBackground(WHITE);
+  ClearBackground(RAYWHITE);
 
   int w = GetScreenWidth(), h = GetScreenHeight();
-  int caption_font = 40, text_font = 30;
+  float font_size = f.baseSize;
   float spacing = 8.f;
 
   int count = 1;
 
-  center_text_to_h((float)(count++) / (spacing + 2.f),
-                   "Welcome to 3D toroidal go!", w, h, caption_font, BLACK);
+  center_text_to_h((float)(count++) / (spacing + 1.f),
+                   "Welcome to 3D toroidal go!", w, h, f, BLACK);
 
   center_text_to_h((float)count / spacing,
-                   "Use W,S,A,D or the ARROW KEYS to move.", w, h, text_font,
+                   "Use W,S,A,D or the ARROW KEYS to move.", w, h, f, RED);
+  center_text_to_h(((float)(count++) / spacing + (float)font_size / h),
+                   "Hold SPACE+W to move up, and SPACE+S to move down", w, h, f,
                    RED);
-  center_text_to_h(((float)(count++) / spacing + (float)text_font / h),
-                   "Hold SPACE+W to move up, and SPACE+S to move down", w, h,
-                   text_font, RED);
-
-  center_text_to_h(
-      (float)count / spacing,
-      "Press ENTER to place a stone on the closest free spot (marked in green)",
-      w, h, text_font, BLUE);
-  center_text_to_h(((float)(count++) / spacing + (float)text_font / h),
-                   "or CLICK on any free spot (marked in red)", w, h, text_font,
-                   BLUE);
 
   center_text_to_h((float)count / spacing,
-                   "Press E to focus your next closest free spot", w, h,
-                   text_font, ORANGE);
-  center_text_to_h(((float)(count++) / spacing + (float)text_font / h),
-                   "or SHIFT+E to go to the previous closest one", w, h,
-                   text_font, ORANGE);
+                   "Press ENTER to place a stone on the closest free spot "
+                   "(marked in green)",
+                   w, h, f, BLUE);
+  center_text_to_h(((float)(count++) / spacing + (float)font_size / h),
+                   "or CLICK on any free spot (marked in red)", w, h, f, BLUE);
+
+  center_text_to_h((float)count / spacing,
+                   "Press E to focus your next closest free spot", w, h, f,
+                   ORANGE);
+  center_text_to_h(((float)(count++) / spacing + (float)font_size / h),
+                   "or SHIFT+E to go to the previous closest one", w, h, f,
+                   ORANGE);
 
   center_text_to_h((float)(count++) / spacing,
                    "Press R to change view mode (first or third person)", w, h,
-                   text_font, GREEN);
+                   f, GREEN);
 
   center_text_to_h((float)(count++) / spacing,
-                   "Press X to go to your symmetrical position", w, h,
-                   text_font, PURPLE);
+                   "Press X to go to your symmetrical position", w, h, f,
+                   PURPLE);
 
   center_text_to_h((float)(++count) / (spacing + 1.f),
-                   "Press SPACE to start playing!", w, h, caption_font, BLACK);
+                   "Press SPACE to start playing!", w, h, f, BLACK);
 
   EndDrawing();
 }

@@ -38,7 +38,7 @@ void UpdateDrawFrame(void *arg_) {
   }
 
   if (!start_game) {
-    show_welcome_screen();
+    show_welcome_screen(arg->font);
     return;
   }
 
