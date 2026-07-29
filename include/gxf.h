@@ -64,6 +64,8 @@ typedef struct {
   Color camera_color;
 } MainLoopArg;
 
+void show_welcome_screen(void);
+
 MainLoopArg *gxf_init(int);
 Vector3 gxf_update(MainLoopArg *);
 void gxf_draw(MainLoopArg *);

@@ -13,9 +13,9 @@ RAYLIB_WEB_CFLAGS = -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
 RAYLIB_WEB_OBJS = rcore.o rshapes.o rtextures.o rtext.o rmodels.o raudio.o
 
 native: src/main.c
-	$(CC) -o main src/main.c src/gxf.c \
+	$(CC) -o main src/main.c \
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
-		$(CFLAGS)
+		$(CFLAGS) $(SRC_FILES)
 
 web_raylib:
 	source $(EMSDK_ENV) && \

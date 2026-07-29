@@ -31,6 +31,17 @@ int main() {
 void UpdateDrawFrame(void *arg_) {
   MainLoopArg *arg = arg_;
 
+  static int start_game = 0;
+
+  if (IsKeyPressed(KEY_SPACE)) {
+    start_game = 1;
+  }
+
+  if (!start_game) {
+    show_welcome_screen();
+    return;
+  }
+
   if (arg->count % 2 == 0)
     arg->bs->color = SBLACK;
   else

@@ -1,5 +1,6 @@
 #include "gxf.h"
 #include "rules.h"
+#include <raylib.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -32,7 +33,6 @@ MainLoopArg *gxf_init(const int player_color) {
 
   SetWindowState(FLAG_WINDOW_RESIZABLE);
   InitWindow(W, H, "Toroidal Go");
-  DisableCursor();
 
   arg->camera = (Camera){0};
   arg->camera.position = (Vector3){0.f, 0.f, 25.f};
@@ -61,7 +61,12 @@ MainLoopArg *gxf_init(const int player_color) {
 
   arg->focused_stone = arg->available_points[0].pos;
 
+#if defined(PLATFORM_WEB)
+  arg->camera_mode = CAMERA_THIRD_PERSON;
+#else
   arg->camera_mode = CAMERA_FIRST_PERSON;
+#endif
+
   arg->camera_color = get_rnd_color();
 
   return arg;
@@ -75,17 +80,18 @@ Vector3 gxf_update(MainLoopArg *arg) {
 
   if (IsKeyPressed(KEY_X)) {
     arg->camera.position = Vector3Scale(arg->camera.position, -1.f);
+    arg->camera.target = Vector3Scale(arg->camera.target, -1.f);
   }
 
   static int was_pressed_r = 0;
   if (IsKeyPressed(KEY_R)) {
-    was_pressed_r++;
     if (was_pressed_r % 2 == 0)
-      arg->camera_mode = CAMERA_FIRST_PERSON;
-    else
       arg->camera_mode = CAMERA_THIRD_PERSON;
+    else
+      arg->camera_mode = CAMERA_FIRST_PERSON;
 
     arg->camera.up = (Vector3){0.0f, 1.0f, 0.0f};
+    was_pressed_r++;
   }
 
   Vector3 mouse_delta;
@@ -120,9 +126,14 @@ void gxf_draw(MainLoopArg *arg) {
 
   EndMode3D();
 
-#if defined(PLATFROM_WEB)
+  DrawText(TextFormat("BLACK CAPTURES: %d", arg->bs->black_captured_stones), 10,
+           30, 30, WHITE);
+  DrawText(TextFormat("WHITE CAPTURES: %d", arg->bs->white_captured_stones), 10,
+           60, 30, WHITE);
+
+#if defined(PLATFORM_WEB)
 #else
-  DrawText(TextFormat("%.2f", 1.f / GetFrameTime()), 10, 10, 20, WHITE);
+  DrawText(TextFormat("%.2f FPS", 1.f / GetFrameTime()), 10, 10, 20, WHITE);
 #endif
 
   EndDrawing();
@@ -141,11 +152,67 @@ void gxf_cleanup(MainLoopArg *arg) {
   CloseWindow();
 }
 
+void static inline center_text_to_h(float fh, const char *text, int w, int h,
+                                    int font_size, Color color) {
+  int text_width = MeasureText(text, font_size);
+  DrawText(text, (w - text_width) / 2, fh * h, font_size, color);
+}
+
+void show_welcome_screen() {
+  BeginDrawing();
+  ClearBackground(WHITE);
+
+  int w = GetScreenWidth(), h = GetScreenHeight();
+  int caption_font = 40, text_font = 30;
+  float spacing = 8.f;
+
+  int count = 1;
+
+  center_text_to_h((float)(count++) / (spacing + 2.f),
+                   "Welcome to 3D toroidal go!", w, h, caption_font, BLACK);
+
+  center_text_to_h((float)count / spacing,
+                   "Use W,S,A,D or the ARROW KEYS to move.", w, h, text_font,
+                   RED);
+  center_text_to_h(((float)(count++) / spacing + (float)text_font / h),
+                   "Hold SPACE+W to move up, and SPACE+S to move down", w, h,
+                   text_font, RED);
+
+  center_text_to_h(
+      (float)count / spacing,
+      "Press ENTER to place a stone on the closest free spot (marked in green)",
+      w, h, text_font, BLUE);
+  center_text_to_h(((float)(count++) / spacing + (float)text_font / h),
+                   "or CLICK on any free spot (marked in red)", w, h, text_font,
+                   BLUE);
+
+  center_text_to_h((float)count / spacing,
+                   "Press E to focus your next closest free spot", w, h,
+                   text_font, ORANGE);
+  center_text_to_h(((float)(count++) / spacing + (float)text_font / h),
+                   "or SHIFT+E to go to the previous closest one", w, h,
+                   text_font, ORANGE);
+
+  center_text_to_h((float)(count++) / spacing,
+                   "Press R to change view mode (first or third person)", w, h,
+                   text_font, GREEN);
+
+  center_text_to_h((float)(count++) / spacing,
+                   "Press X to go to your symmetrical position", w, h,
+                   text_font, PURPLE);
+
+  center_text_to_h((float)(++count) / (spacing + 1.f),
+                   "Press SPACE to start playing!", w, h, caption_font, BLACK);
+
+  EndDrawing();
+}
+
 void control_camera(Camera *camera, Vector3 *mouse_delta, int camera_mode) {
   static bool was_moving = false;
   bool moving = is_moving();
-  if (moving && !was_moving)
+  if (moving && !was_moving) {
     DisableCursor();
+  }
   if (camera_mode != CAMERA_THIRD_PERSON && !moving && was_moving)
     EnableCursor();
   was_moving = moving;
@@ -223,9 +290,13 @@ int try_place_stone_keyboard(MainLoopArg *arg) {
 
   arg->focused_stone = arg->available_points[count_from_closest].pos;
 
-  if (IsKeyPressed(KEY_ENTER)) {
+  int virtual_cursor_click = (arg->camera_mode == CAMERA_THIRD_PERSON &&
+                              IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+
+  if (IsKeyPressed(KEY_ENTER) || virtual_cursor_click) {
+    int temp = count_from_closest;
     count_from_closest = 0;
-    return arg->available_points[count_from_closest].idx;
+    return arg->available_points[temp].idx;
   }
 
   return -1;

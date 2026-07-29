@@ -26,7 +26,8 @@ typedef struct {
   Stack reached;
   Stack chain;
 
-  int captured_stone_count;
+  int black_captured_stones;
+  int white_captured_stones;
 } BoardState;
 
 BoardState *init_bs(const int);
