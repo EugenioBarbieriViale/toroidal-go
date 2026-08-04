@@ -12,8 +12,8 @@ RAYLIB_WEB_LIB = $(RAYLIB_SRC)/libraylib.a
 RAYLIB_WEB_CFLAGS = -Os -Wall -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
 RAYLIB_WEB_OBJS = rcore.o rshapes.o rtextures.o rtext.o rmodels.o raudio.o
 
-native: src/main.c
-	$(CC) -o main src/main.c \
+native: src/client.c
+	$(CC) -o client src/client.c \
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
 		$(CFLAGS) $(SRC_FILES)
 
@@ -28,16 +28,16 @@ web_raylib:
 	emcc -c raudio.c    -Os -Wall -DPLATFORM_WEB && \
 	emar rcs libraylib.a $(WEB_OBJS)
 
-web: src/main.c
-	$(EMCC) src/main.c -o main.html \
+web: src/client.c
+	$(EMCC) src/client.c -o main.html \
 		./external/raylib/src/libraylib.a \
 		-I. -I./external/raylib/src/raylib.h \
 		-L. -L./external/raylib/src/libraylib.a \
 		-I include \
 		$(WEB_CFLAGS)
 
-debug: src/main.c
-	$(CC) -o main src/main.c \
+debug: src/client.c
+	$(CC) -o client src/client.c \
 		-lraylib -lGL -lm -lpthread -ldl -lrt -lX11 \
 		$(DBG_CFLAGS)
 
@@ -46,7 +46,7 @@ server: src/server.c
 		$(DBG_CFLAGS)
 
 run:
-	./main
+	./client
 
 run_web:
 	python -m http.server 8080
@@ -55,5 +55,5 @@ serve:
 	./server
 
 clean:
-	rm main
+	rm client
 	rm server
