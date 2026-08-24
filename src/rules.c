@@ -125,29 +125,25 @@ static int maybe_capture(unsigned int libs, int board[], Stack *chain) {
   return 0;
 }
 
-int move(BoardState *bs, char *return_buf, int *buf_len) {
+int move(BoardState *bs, char *return_buf, int buf_len) {
   Coord2 c = unflatten(bs->fc);
 
   if (bs->fc < 0 || bs->fc > BOARD_SIZE) {
-    *buf_len = snprintf(return_buf, *buf_len,
-                        "ILLEGAL MOVE: position (%d, %d) is out of bounds",
-                        c.row, c.col);
-    return 1;
+    snprintf(return_buf, buf_len,
+             "ILLEGAL MOVE: position (%d, %d) is out of bounds", c.row, c.col);
+    return 0;
   }
 
   if (bs->board[bs->fc] != EMPTY) {
-    *buf_len =
-        snprintf(return_buf, *buf_len,
-                 "ILLEGAL MOVE: (%d, %d) already occupied", c.row, c.col);
-    // printf("ILLEGAL MOVE: (%d, %d) already occupied\n", c.row, c.col);
-    return 1;
+    snprintf(return_buf, buf_len, "ILLEGAL MOVE: (%d, %d) already occupied",
+             c.row, c.col);
+    return 0;
   }
 
   if (bs->fc == ko_point) {
-    *buf_len = snprintf(return_buf, *buf_len,
-                        "ILLEGAL MOVE: ko violation at (%d, %d)", c.row, c.col);
-    // printf("ILLEGAL MOVE: ko violation at (%d, %d)\n", c.row, c.col);
-    return 1;
+    snprintf(return_buf, buf_len, "ILLEGAL MOVE: ko violation at (%d, %d)",
+             c.row, c.col);
+    return 0;
   }
 
   ko_point = -1;
@@ -193,11 +189,10 @@ int move(BoardState *bs, char *return_buf, int *buf_len) {
 
   if (fc_libs == 0) {
     bs->board[bs->fc] = EMPTY;
-    *buf_len = snprintf(return_buf, *buf_len,
-                        "ILLEGAL MOVE: suicide at (%d, %d)", c.row, c.col);
-    // printf("ILLEGAL MOVE: suicide at (%d, %d)\n", c.row, c.col);
+    snprintf(return_buf, buf_len, "ILLEGAL MOVE: suicide at (%d, %d)", c.row,
+             c.col);
     free(opp_stones.buffer);
-    return 1;
+    return 0;
   }
 
   int fc_group_size = bs->chain.top + 1;
@@ -208,9 +203,9 @@ int move(BoardState *bs, char *return_buf, int *buf_len) {
 
   free(opp_stones.buffer);
 
-  *buf_len = snprintf(return_buf, *buf_len,
-                      "Successfully placed stone at (%d, %d)", c.row, c.col);
-  return 0;
+  snprintf(return_buf, buf_len, "Successfully placed stone at (%d, %d)", c.row,
+           c.col);
+  return 1;
 }
 
 void score(int board[], const int all_neighbors[][4], int *black_score,

@@ -89,8 +89,8 @@ int send_greetings(int server_fd) {
 
 int get_color_from_server(int server_fd) {
   char buf[INIT_BUF_LEN] = {' '};
-  int n = recv(server_fd, buf, INIT_BUF_LEN, 0);
-  check(&n, "Failed to get color from server", 0);
+  int status = recv(server_fd, buf, INIT_BUF_LEN, 0);
+  check(&status, "Failed to get color from server", 0);
 
   HttpResponse res = parse_http_response(buf);
   if (strlen(res.content) != 1 && res.content[0] != BLACK &&
@@ -105,24 +105,46 @@ int get_color_from_server(int server_fd) {
   return c;
 }
 
-void send_board_to_server(int server_fd, char *board, int *status) {
+static inline char encode_move_type(MoveType type) {
+  switch (type) {
+  case MOVE:
+    return 'M';
+  case PASS:
+    return 'P';
+  case RESIGN:
+    return 'R';
+  default:
+    return 'U';
+  }
+}
+
+int send_board_to_server(int server_fd, MoveType type, int fc,
+                         int board[BOARD_SIZE]) {
   int tot_buf_size = 2 * INIT_BUF_LEN;
   char send_buf[tot_buf_size];
 
-  int actual_len = snprintf(send_buf, tot_buf_size,
-                            "POST / HTTP/1.1\r\n"
-                            "Host: %s:%d\r\n"
-                            "User-Agent: None\r\n"
-                            "Content-type: text/plain\r\n"
-                            "Content-length: %d\r\n"
-                            "\r\n"
-                            "B4-%s\r\n",
-                            SERVER_IP, PORT, BOARD_MSG_LEN, board
+  char board_str[BOARD_SIZE + 1];
+  for (int i = 0; i < BOARD_SIZE; i++)
+    board_str[i] = board[i] + '0';
+  board_str[BOARD_SIZE] = '\0';
 
-  );
+  char type_chr = encode_move_type(type);
+  int actual_len =
+      snprintf(send_buf, tot_buf_size,
+               "POST / HTTP/1.1\r\n"
+               "Host: %s:%d\r\n"
+               "User-Agent: None\r\n"
+               "Content-type: text/plain\r\n"
+               "Content-length: %d\r\n"
+               "\r\n"
+               "%c%d-%s\r\n",
+               SERVER_IP, PORT, BOARD_MSG_LEN, type_chr, fc, board_str
+
+      );
 
   printf("Length of sent data (including header): %d\n", actual_len);
-  printf("%s\n", board);
+  printf("%s\n", board_str);
 
-  *status = send(server_fd, send_buf, actual_len, 0);
+  int status = send(server_fd, send_buf, actual_len, 0);
+  return status;
 }

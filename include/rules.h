@@ -32,7 +32,7 @@ typedef struct {
 
 BoardState *init_bs(const int);
 
-int move(BoardState *bs, char *, int *);
+int move(BoardState *bs, char *, int);
 void score(int *, const int[][4], int *, int *);
 
 #endif

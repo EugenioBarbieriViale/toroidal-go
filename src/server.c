@@ -1,5 +1,5 @@
-#include "../src/rules.h"
 #include "httplib.h"
+#include "rules.h"
 
 #include <errno.h>
 #include <netinet/in.h>
@@ -28,11 +28,10 @@ static inline void check(int *status, const char *msg) {
 int create_client(int);
 void decide_colors(int, int, int *, int *);
 int parse_board_msg(char *, BoardState *);
-void handle_player(int, int, int *, BoardState *);
+void handle_players(int, int, int, int *, BoardState *);
 
 int main() {
-  BoardState *bs = malloc(sizeof(BoardState));
-  init_bs(bs);
+  BoardState *bs = init_bs(UNDEF);
 
   srand(time(NULL));
   int status;
@@ -81,12 +80,16 @@ int main() {
       break;
     }
 
-    if (FD_ISSET(fd_a, &readfs)) {
-      handle_player(fd_a, color_a, &a_requested, bs);
-    }
+    // if (FD_ISSET(fd_a, &readfs)) {
+    //   handle_players(fd_a, fd_b, color_a, &a_requested, bs);
+    // }
+    //
+    // if (FD_ISSET(fd_b, &readfs)) {
+    //   handle_players(fd_a, fd_b, color_b, &b_requested, bs);
+    // }
 
-    if (FD_ISSET(fd_b, &readfs)) {
-      handle_player(fd_b, color_b, &b_requested, bs);
+    if (FD_ISSET(fd_a, &readfs) && FD_ISSET(fd_b, &readfs)) {
+      handle_players(fd_a, fd_b, color_a, &a_requested, bs);
     }
 
     if (a_requested && b_requested) {
@@ -211,80 +214,93 @@ int parse_board_msg(char *board_msg, BoardState *bs) {
   return 0;
 }
 
-void handle_player(int fd, int color, int *request, BoardState *bs) {
+static inline void board_to_str(int board[BOARD_SIZE],
+                                char board_str[BOARD_SIZE + 1]) {
+  for (int i = 0; i < BOARD_SIZE; i++) {
+    board_str[i] = board[i] + '0';
+  }
+  board_str[BOARD_SIZE] = '\0';
+}
+
+void handle_players(int fd_a, int fd_b, int color, int *request,
+                    BoardState *bs) {
   char buf[INIT_BUF_LEN * 2];
 
-  int n = recv(fd, buf, INIT_BUF_LEN * 2, 0);
+  int n = recv(fd_a, buf, INIT_BUF_LEN * 2, 0);
+
+  if (n < 0) {
+    perror("Could not get message from client");
+    return;
+  } else if (n == 0) {
+    printf("Player has closed the connection successfully\n");
+    return;
+  }
+
+  buf[n] = '\0';
   printf("%s\n", buf);
 
   HttpRequest req = parse_http_request(buf);
 
-  if (n == 0) {
-    printf("Player has closed the connection successfully\n");
+  if (strcmp(req.content, "*!") == 0) {
+    *request = 1;
     free_request(&req);
     return;
-  } else if (n > 0) {
-    if (strcmp(req.content, "*!") == 0) {
-      *request = 1;
-      free_request(&req);
-      return;
-    }
+  }
 
-    if (parse_board_msg(req.content, bs) == 1) {
-      char err_buf[INIT_BUF_LEN];
-      int len = snprintf(err_buf, INIT_BUF_LEN,
-                         "HTTP/1.1 400 Bad Request\r\n"
-                         "Server: my-server\r\n"
-                         "Content-type: text/plain\r\n"
-                         "Content-length: 1\r\n"
-                         "\r\n"
-                         "?\r\n");
-      int status = send(fd, err_buf, len, 0);
-      check(&status, "Failed to send error msg to player");
-      free_request(&req);
-      return;
-    }
+  if (parse_board_msg(req.content, bs)) {
+    char err_buf[INIT_BUF_LEN];
+    int len = snprintf(err_buf, INIT_BUF_LEN,
+                       "HTTP/1.1 400 Bad Request\r\n"
+                       "Server: my-server\r\n"
+                       "Content-type: text/plain\r\n"
+                       "Content-length: 1\r\n"
+                       "\r\n"
+                       "?\r\n");
+    int status = send(fd_a, err_buf, len, 0);
+    check(&status, "Failed to send error msg to player");
+    free_request(&req);
+    return;
+  }
 
-    // check rules, send YES / NO
-    char move_msg_buf[INIT_BUF_LEN];
-    int buf_len = INIT_BUF_LEN;
-    int return_code = move(bs->fc, color, bs->board, bs->all_neighbors,
-                           &bs->reached, &bs->chain, move_msg_buf, &buf_len);
+  // check rules, send YES / NO
+  char move_msg_buf[INIT_BUF_LEN];
+  int buf_len = INIT_BUF_LEN;
 
-    if (return_code != 0) {
-      char err_buf[INIT_BUF_LEN];
-      int len = snprintf(err_buf, INIT_BUF_LEN,
-                         "HTTP/1.1 400 Bad Request\r\n"
-                         "Server: my-server\r\n"
-                         "Content-type: text/plain\r\n"
-                         "Content-length: %d\r\n"
-                         "\r\n"
-                         "%s\r\n",
-                         buf_len, move_msg_buf);
-      int status = send(fd, err_buf, len, 0);
-      check(&status, "Failed to send error msg to player");
-    } else {
-      printf("%s\n", move_msg_buf);
+  int move_success = move(bs, move_msg_buf, buf_len);
 
-      char board_str[BOARD_SIZE + 1];
-      for (int i = 0; i < BOARD_SIZE; i++) {
-        board_str[i] = bs->board[i] + '0';
-      }
-      board_str[BOARD_SIZE] = '\0';
+  if (!move_success) {
+    char err_buf[INIT_BUF_LEN];
+    int len = snprintf(err_buf, INIT_BUF_LEN,
+                       "HTTP/1.1 400 Bad Request\r\n"
+                       "Server: my-server\r\n"
+                       "Content-type: text/plain\r\n"
+                       "Content-length: %d\r\n"
+                       "\r\n"
+                       "%s\r\n",
+                       buf_len, move_msg_buf);
+    int status = send(fd_a, err_buf, len, 0);
+    check(&status, "Failed to send error msg to player");
+  } else {
+    printf("%s\n", move_msg_buf);
 
-      char buf[INIT_BUF_LEN * 2];
-      int len = snprintf(buf, INIT_BUF_LEN * 2,
-                         "HTTP/1.1 200 OK\r\n"
-                         "Server: my-server\r\n"
-                         "Content-type: text/plain\r\n"
-                         "Content-length: %d\r\n"
-                         "\r\n"
-                         "%s\r\n",
-                         buf_len, board_str);
+    char board_str[BOARD_SIZE + 1];
+    board_to_str(bs->board, board_str);
 
-      int status = send(fd, buf, len, 0);
-      check(&status, "Failed to send board to player");
-    }
+    char buf[INIT_BUF_LEN * 2];
+    int len = snprintf(buf, INIT_BUF_LEN * 2,
+                       "HTTP/1.1 200 OK\r\n"
+                       "Server: my-server\r\n"
+                       "Content-type: text/plain\r\n"
+                       "Content-length: %d\r\n"
+                       "\r\n"
+                       "%s\r\n",
+                       BOARD_SIZE, board_str);
+
+    int status = send(fd_a, buf, len, 0);
+    check(&status, "Failed to send board to player A");
+
+    status = send(fd_b, buf, len, 0);
+    check(&status, "Failed to send board to player B");
   }
 
   free_request(&req);

@@ -47,6 +47,7 @@ typedef struct {
 } AvailablePoint;
 
 typedef struct {
+  int server_fd;
   Camera camera;
 
   Model torus;
@@ -60,7 +61,7 @@ typedef struct {
 
   AvailablePoint available_points[BOARD_SIZE];
   Vector3 focused_stone;
-  int count;
+  int av_count;
 
   int camera_mode;
   Color camera_color;
@@ -68,7 +69,7 @@ typedef struct {
 
 void show_welcome_screen(Font);
 
-MainLoopArg *gxf_init(int);
+MainLoopArg *gxf_init(const int, const int);
 Vector3 gxf_update(MainLoopArg *);
 void gxf_draw(MainLoopArg *);
 void gxf_cleanup(MainLoopArg *);

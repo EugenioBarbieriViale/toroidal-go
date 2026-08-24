@@ -1,8 +1,10 @@
 CC = gcc
 EMCC = emcc
 
+SRC_FILES = src/rules.c src/stack.c src/net.c src/httplib.c src/gxf.c 
+SERVER_FILES = src/rules.c src/stack.c src/net.c src/httplib.c
+
 CFLAGS = -g -Os -I include 
-SRC_FILES = src/rules.c src/stack.c src/gxf.c
 DBG_CFLAGS = $(CFLAGS) $(SRC_FILES) -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
 WEB_CFLAGS = $(SRC_FILES) -Os -s USE_GLFW=3 -s TOTAL_STACK=64MB -s INITIAL_MEMORY=128MB -s ASSERTIONS --preload-file assets -DPLATFORM_WEB --shell-file shell.html
 
@@ -42,8 +44,8 @@ debug: src/client.c
 		$(DBG_CFLAGS)
 
 server: src/server.c
-	$(CC) -o server server.c \
-		$(DBG_CFLAGS)
+	$(CC) -o server src/server.c \
+		$(CFLAGS) $(SERVER_FILES)
 
 run:
 	./client

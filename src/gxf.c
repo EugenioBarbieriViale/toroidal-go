@@ -25,7 +25,7 @@ static inline Color get_rnd_color(void) {
   return colors[ci];
 }
 
-MainLoopArg *gxf_init(const int player_color) {
+MainLoopArg *gxf_init(const int server_fd, const int player_color) {
   MainLoopArg *arg = (MainLoopArg *)malloc(sizeof(MainLoopArg));
 
   srand(time(NULL));
@@ -77,9 +77,9 @@ MainLoopArg *gxf_init(const int player_color) {
 
 Vector3 gxf_update(MainLoopArg *arg) {
   if (arg->camera_mode == CAMERA_THIRD_PERSON)
-    sort_points(arg->count, arg->available_points, arg->camera.target);
+    sort_points(arg->av_count, arg->available_points, arg->camera.target);
   else
-    sort_points(arg->count, arg->available_points, arg->camera.position);
+    sort_points(arg->av_count, arg->available_points, arg->camera.position);
 
   if (IsKeyPressed(KEY_X)) {
     arg->camera.position = Vector3Scale(arg->camera.position, -1.f);
@@ -264,11 +264,11 @@ void control_camera(Camera *camera, Vector3 *mouse_delta, int camera_mode) {
 }
 
 void update_available(MainLoopArg *arg) {
-  arg->count = 0;
+  arg->av_count = 0;
   for (int i = 0; i < BOARD_SIZE; i++) {
     int stone = arg->bs->board[i];
     if (stone == EMPTY || stone == UNDEF) {
-      arg->available_points[arg->count++] = (AvailablePoint){
+      arg->available_points[arg->av_count++] = (AvailablePoint){
           .idx = i,
           .pos = arg->intersections[i],
       };
@@ -321,7 +321,7 @@ int try_place_stone_mouse(Vector3 mouse_delta, MainLoopArg *arg) {
 
   Ray ray = GetScreenToWorldRay(GetMousePosition(), arg->camera);
 
-  for (int i = 0; i < arg->count; i++) {
+  for (int i = 0; i < arg->av_count; i++) {
     RayCollision collision = GetRayCollisionSphere(
         ray, arg->available_points[i].pos, COLLISION_RADIUS);
 
