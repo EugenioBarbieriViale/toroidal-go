@@ -41,6 +41,11 @@ static inline float dist(Vector3 v, Vector3 w) {
 #define COLLISION_RADIUS (0.2f)
 #define ORIGIN ((Vector3){0.f, 0.f, 0.f})
 
+#define BOARD_TEXTURE_PATH "./web/assets/board1.png"
+#define BLACK_TEXTURE_PATH "./web/assets/black_stone.png"
+#define WHITE_TEXTURE_PATH "./web/assets/white_stone.png"
+#define FONT_PATH "./web/assets/IosevkaNerdFont-Bold.ttf"
+
 typedef struct {
   Vector3 pos;
   int idx;

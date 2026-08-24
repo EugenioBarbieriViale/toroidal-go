@@ -44,17 +44,17 @@ MainLoopArg *gxf_init(const int server_fd, const int player_color) {
   arg->black = LoadModelFromMesh(GenMeshSphere(1, 32, 64));
   arg->white = LoadModelFromMesh(GenMeshSphere(1, 32, 64));
 
-  Texture2D texture = LoadTexture("./assets/board1.png");
+  Texture2D texture = LoadTexture(BOARD_TEXTURE_PATH);
   arg->torus.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
-  texture = LoadTexture("./assets/black_stone.png");
+  texture = LoadTexture(BLACK_TEXTURE_PATH);
   arg->black.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
-  texture = LoadTexture("./assets/white_marble.png");
+  texture = LoadTexture(WHITE_TEXTURE_PATH);
   arg->white.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
   // arg->font = LoadFont("./assets/IosevkaNerdFont-Regular.ttf");
-  arg->font = LoadFont("./assets/IosevkaNerdFont-Bold.ttf");
+  arg->font = LoadFont(FONT_PATH);
 
   compute_inters(arg->intersections);
   arg->bs = init_bs(player_color);
