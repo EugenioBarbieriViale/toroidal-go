@@ -1,10 +1,4 @@
 external/emsdk/
+web/build
 
-rules
-server
 client
-
-main.html
-main.js
-main.wasm
-main.data
