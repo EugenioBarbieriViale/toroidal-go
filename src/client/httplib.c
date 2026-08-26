@@ -146,7 +146,8 @@ char *parse_content(char *str, int content_len) {
     exit(EXIT_FAILURE);
   int header_len = header_end - str;
 
-  int diff = strlen(str) - header_len - 6;
+  // int diff = strlen(str) - header_len - 6;
+  int diff = strlen(str) - header_len - 4;
   if (diff != content_len) {
     printf("Invalid content length: expected %d but found %d\n", diff,
            content_len);

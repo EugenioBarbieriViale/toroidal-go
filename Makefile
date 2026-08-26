@@ -44,8 +44,11 @@ web_raylib:
 	emcc -c raudio.c    -Os -Wall -DPLATFORM_WEB && \
 	emar rcs libraylib.a $(WEB_OBJS)
 
+test: src/client/test.c
+	$(CC) -o test src/client/test.c src/client/net.c src/client/httplib.c $(CFLAGS) -Wall -Wextra -Wconversion -Wfloat-equal -Wunreachable-code -Wno-free-nonheap-object -Wdouble-promotion -Wformat -Wpedantic -fsanitize={address,undefined}
+
 run:
-	./client
+	./test
 
 run_web:
 	cd web/build && python -m http.server 8080

@@ -1,4 +1,6 @@
+src/server/target/
 external/emsdk/
 web/build
 
-client
+./client
+./test
