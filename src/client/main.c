@@ -18,19 +18,19 @@ int main() {
   int player_color = get_color_from_server(server_fd);
   printf("Color received from server: %d\n", player_color);
 
-  MainLoopArg *main_loop_arg = gxf_init(server_fd, player_color);
-
-#if defined(PLATFORM_WEB)
-  emscripten_set_main_loop_arg(UpdateDrawFrame, main_loop_arg, 0, 1);
-#else
-  SetTargetFPS(FPS);
-
-  while (!WindowShouldClose()) {
-    UpdateDrawFrame(main_loop_arg);
-  }
-#endif
-
-  gxf_cleanup(main_loop_arg);
+  //   MainLoopArg *main_loop_arg = gxf_init(server_fd, player_color);
+  //
+  // #if defined(PLATFORM_WEB)
+  //   emscripten_set_main_loop_arg(UpdateDrawFrame, main_loop_arg, 0, 1);
+  // #else
+  //   SetTargetFPS(FPS);
+  //
+  //   while (!WindowShouldClose()) {
+  //     UpdateDrawFrame(main_loop_arg);
+  //   }
+  // #endif
+  //
+  //   gxf_cleanup(main_loop_arg);
   close_connection(server_fd);
 
   return 0;

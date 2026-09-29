@@ -7,9 +7,12 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
     println!("listening on 127.0.0.1:8080");
 
+    let mut count = 0;
     for stream in listener.incoming() {
-        let stream = stream.unwrap();
+        count += 1;
 
+        let stream = stream.unwrap();
+        println!("Handling connection number {}", count);
         handle_connection(stream);
     }
 
@@ -49,13 +52,23 @@ fn handle_connection(mut stream: TcpStream) {
 
     let (status_line, content) = if body == "*!" {
         println!("YAY");
-        ("HTTP/1.1 200 OK", format!("{random_color}"))
+        (String::from("HTTP/1.1 200 OK"), format!("{random_color}"))
     } else {
-        ("HTTP/1.1 404 NOT FOUND", String::new())
+        parse_move_request(body.to_string())
+        // ("HTTP/1.1 404 NOT FOUND", String::new())
     };
 
     let len = content.len();
     let response = format!("{status_line}\r\nContent-length: {len}\r\n\r\n{content}");
-    println!("{response}");
+    println!("Response: {response}");
     stream.write_all(response.as_bytes()).unwrap();
+}
+
+fn parse_move_request(board_msg: String) -> (String, String) {
+    let mut fc: isize = -1;
+    if board_msg.chars().nth(0).unwrap() == 'M' {
+        fc = board_msg.chars().nth(1).unwrap() as isize;
+    }
+
+    (String::new(), String::new())
 }
